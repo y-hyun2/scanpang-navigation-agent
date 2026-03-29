@@ -1,14 +1,13 @@
-import os
 import json
 import re
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from tools.navigation_tools import search_poi, get_pedestrian_route
 from schemas.navigation import NavRequest, RouteRequest
 
 load_dotenv()
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 # ── Step 0: 의도 파악 + 키워드 추출 ───────────────────────────────────────────
 INTENT_PROMPT = """Extract navigation intent from the user's message. Return valid JSON only, no explanation.
@@ -39,7 +38,7 @@ POI list:
 
 # ── Step 2: 경로 턴포인트별 TTS 안내 문구 생성 ────────────────────────────────
 SPEECH_PROMPT = """Generate short TTS navigation instructions for each turn point.
-Language: {language} (if Arabic, respond in English)
+Language: {language} — ko=Korean, en=English, ar=Arabic. Respond in that language.
 Respond with a JSON array of strings — one string per turn point, in order. No explanation, no markdown.
 
 Rules:
