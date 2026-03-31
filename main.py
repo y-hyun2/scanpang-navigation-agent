@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from schemas.navigation import NavRequest, RouteRequest
 from agents.navigation_agent import run_search_agent, run_route_agent
+from schemas.place import PlaceRequest
+from agents.place_insight_agent import run_place_insight_agent
 
 app = FastAPI(title="ScanPang Navigation API")
 
@@ -20,3 +22,11 @@ async def navigation_route(req: RouteRequest):
     2단계: 확정된 목적지 → 보행자 경로 계산 + 턴별 TTS 안내 반환
     """
     return await run_route_agent(req)
+
+
+@app.post("/place/query")
+async def place_query(req: PlaceRequest):
+    """
+    ARCore가 인식한 건물 place_id → AR 오버레이 데이터 + TTS 도슨트 해설 반환
+    """
+    return await run_place_insight_agent(req)
