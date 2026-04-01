@@ -19,10 +19,13 @@ class ArOverlay(BaseModel):
     name: str
     category: str
     floor_info: List[FloorInfo]
-    tags: List[str]
-    tourist_tip: str
     halal_info: str
     image_url: str
+    homepage: str
+    open_hours: str
+    closed_days: str
+    parking_info: str
+    admission_fee: str
 
 
 class Docent(BaseModel):

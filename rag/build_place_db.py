@@ -11,7 +11,6 @@ build_place_db.py
 import asyncio
 import json
 import os
-from pathlib import Path
 
 import httpx
 from openai import AsyncOpenAI
@@ -29,9 +28,10 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
+# building_key: 모두 None → Kakao 도로명주소 → Juso API로 bdMgtSn 자동 획득
 TARGET_PLACES = [
     {"place_id": "myeongdong_cathedral",        "name": "명동성당",            "building_key": None},
-    {"place_id": "lotte_dept_myeongdong",       "name": "롯데백화점 명동본점",  "building_key": "1114010200100560008012745"},
+    {"place_id": "lotte_dept_myeongdong",       "name": "롯데백화점 명동본점",  "building_key": None},
     {"place_id": "shinsegae_myeongdong",        "name": "신세계백화점 본점",    "building_key": None},
     {"place_id": "noon_square_myeongdong",      "name": "명동 눈스퀘어",       "building_key": None},
     {"place_id": "cgv_myeongdong",              "name": "CGV 명동",            "building_key": None},
@@ -42,8 +42,6 @@ TARGET_PLACES = [
 
 MYEONGDONG_LNG = 126.9822
 MYEONGDONG_LAT = 37.5636
-
-MANUAL_DATA_PATH = Path(__file__).parent / "data" / "places_manual.json"
 
 
 # ── Step 1: Kakao Local 기본 정보 ──────────────────────────────────────────────
@@ -77,9 +75,24 @@ async def fetch_kakao_info(place_name: str) -> dict:
     }
 
 
-# ── Step 2: TourAPI description + image ───────────────────────────────────────
+# ── Step 2: TourAPI description + image + 상세정보 ────────────────────────────
 
-TOUR_CONTENT_TYPES = [12, 14, 38]  # 관광지, 문화시설, 쇼핑
+# 명동 확장 대응: 전체 contentTypeId 포함
+TOUR_CONTENT_TYPES = [12, 14, 15, 25, 28, 32, 38, 39]
+# 12:관광지, 14:문화시설, 15:행사/공연/축제, 25:여행코스,
+# 28:레포츠, 32:숙박, 38:쇼핑, 39:음식점
+
+# contentTypeId별 detailIntro2 필드 매핑
+INTRO_FIELD_MAP = {
+    12: {"open_hours": "usetime",         "closed_days": "restdate",         "parking_info": "parking",         "admission_fee": ""},
+    14: {"open_hours": "usetimeculture",   "closed_days": "restdateculture",  "parking_info": "parkingculture",  "admission_fee": "usefee"},
+    15: {"open_hours": "playtime",         "closed_days": "",                 "parking_info": "",                "admission_fee": "usetimefestival"},
+    25: {"open_hours": "taketime",         "closed_days": "",                 "parking_info": "",                "admission_fee": ""},
+    28: {"open_hours": "usetimeleports",   "closed_days": "restdateleports",  "parking_info": "parkingleports",  "admission_fee": "usefeeleports"},
+    32: {"open_hours": "checkintime",      "closed_days": "checkouttime",     "parking_info": "parkinghotel",    "admission_fee": ""},
+    38: {"open_hours": "opentime",         "closed_days": "restdateshopping", "parking_info": "parkingshopping", "admission_fee": ""},
+    39: {"open_hours": "opentimefood",     "closed_days": "restdatefood",     "parking_info": "parkingfood",     "admission_fee": ""},
+}
 
 async def fetch_tour_info(place_name: str) -> dict:
     base = "https://apis.data.go.kr/B551011/KorService2"
@@ -91,6 +104,7 @@ async def fetch_tour_info(place_name: str) -> dict:
     }
 
     content_id = None
+    content_type_id = None
     image_url = ""
 
     async with httpx.AsyncClient() as client:
@@ -101,31 +115,48 @@ async def fetch_tour_info(place_name: str) -> dict:
             if items:
                 first = items[0] if isinstance(items, list) else items
                 content_id = first.get("contentid")
+                content_type_id = ctype
                 image_url = first.get("firstimage", "")
                 break
 
         if not content_id:
             return {}
 
-        # overview
-        resp = await client.get(f"{base}/detailCommon2", params={**common_params, "contentId": content_id, "overviewYN": "Y"})
+        # detailCommon2: overview + homepage
+        resp = await client.get(f"{base}/detailCommon2", params={
+            **common_params, "contentId": content_id, "overviewYN": "Y", "homepageYN": "Y"
+        })
         detail = resp.json().get("response", {}).get("body", {}).get("items", {}).get("item", {})
         if isinstance(detail, list):
             detail = detail[0]
         overview_ko = detail.get("overview", "")
+        homepage = detail.get("homepage", "")
 
-        # open_hours (관광지 타입만)
-        open_hours = ""
-        resp2 = await client.get(f"{base}/detailIntro2", params={**common_params, "contentId": content_id, "contentTypeId": 12})
+        # detailIntro2: contentTypeId별 운영시간, 휴무일, 주차, 입장료
+        field_map = INTRO_FIELD_MAP.get(content_type_id, {})
+        resp2 = await client.get(f"{base}/detailIntro2", params={
+            **common_params, "contentId": content_id, "contentTypeId": content_type_id
+        })
         intro = resp2.json().get("response", {}).get("body", {}).get("items", {}).get("item", {})
         if isinstance(intro, list):
             intro = intro[0] if intro else {}
-        open_hours = intro.get("usetime", "")
 
-    # overview → 영어 번역
+        open_hours    = intro.get(field_map.get("open_hours", ""), "")
+        closed_days   = intro.get(field_map.get("closed_days", ""), "")
+        parking_info  = intro.get(field_map.get("parking_info", ""), "")
+        admission_fee = intro.get(field_map.get("admission_fee", ""), "")
+
     description_en = await translate_to_english(overview_ko, place_name) if overview_ko else ""
 
-    return {"description_en": description_en, "image_url": image_url, "open_hours": open_hours}
+    return {
+        "description_en": description_en,
+        "image_url": image_url,
+        "homepage": homepage,
+        "open_hours": open_hours,
+        "closed_days": closed_days,
+        "parking_info": parking_info,
+        "admission_fee": admission_fee,
+    }
 
 
 async def translate_to_english(text_ko: str, place_name: str) -> str:
@@ -213,7 +244,6 @@ async def fetch_building_key(road_addr: str) -> str | None:
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
 async def build_all_places() -> list[dict]:
-    manual_data: dict = json.loads(MANUAL_DATA_PATH.read_text(encoding="utf-8"))
     all_places = []
 
     for target in TARGET_PLACES:
@@ -222,7 +252,7 @@ async def build_all_places() -> list[dict]:
         building_key = target["building_key"]
         print(f"[{place_id}] 수집 중...")
 
-        # Step 1
+        # Step 1: Kakao 기본 정보
         kakao = await fetch_kakao_info(name)
         place = {
             "place_id": place_id,
@@ -234,38 +264,33 @@ async def build_all_places() -> list[dict]:
             "phone": kakao.get("phone", ""),
             "description_en": "",
             "image_url": "",
+            "homepage": "",
             "open_hours": "",
+            "closed_days": "",
+            "parking_info": "",
+            "admission_fee": "",
             "floor_info": [],
-            "tags": [],
-            "tourist_tip": "",
-            "halal_info": "",
         }
 
-        # Step 2: TourAPI
+        # Step 2: TourAPI description + 상세정보
         tour = await fetch_tour_info(name)
         if tour.get("description_en"):
             place["description_en"] = tour["description_en"]
-            place["image_url"] = tour.get("image_url", "")
-            place["open_hours"] = tour.get("open_hours", "")
+            place["image_url"]      = tour.get("image_url", "")
+            place["homepage"]       = tour.get("homepage", "")
+            place["open_hours"]     = tour.get("open_hours", "")
+            place["closed_days"]    = tour.get("closed_days", "")
+            place["parking_info"]   = tour.get("parking_info", "")
+            place["admission_fee"]  = tour.get("admission_fee", "")
         else:
-            # Fallback: GPT 생성
             place["description_en"] = await gpt_generate_description(name)
 
-        # Step 3: floor_info (building_key 있으면 자동)
+        # Step 3: 소상공인 API floor_info (building_key 없으면 Juso로 자동 획득)
         if not building_key and kakao.get("addr"):
             building_key = await fetch_building_key(kakao["addr"])
 
         if building_key:
             place["floor_info"] = await fetch_floor_info(building_key)
-
-        # Step 4: 수동 데이터 병합
-        manual = manual_data.get(place_id, {})
-        place["tags"] = manual.get("tags", [])
-        place["tourist_tip"] = manual.get("tourist_tip", "")
-        place["halal_info"] = manual.get("halal_info", "")
-        # floor_info: 소상공인 API 결과 없으면 수동 데이터 사용
-        if not place["floor_info"]:
-            place["floor_info"] = manual.get("floor_info", [])
 
         all_places.append(place)
         print(f"  → 완료: {place['name_ko']}")
@@ -284,14 +309,12 @@ def save_to_chroma(all_places: list[dict]):
             place["name_ko"],
             place["category"],
             place["description_en"],
-            " ".join(place.get("tags", [])),
         ])
         embedding = model.encode(text).tolist()
 
         # Chroma metadata는 string/int/float/bool만 허용 → floor_info는 JSON 직렬화
         metadata = {k: v for k, v in place.items() if isinstance(v, (str, int, float, bool))}
         metadata["floor_info"] = json.dumps(place.get("floor_info", []), ensure_ascii=False)
-        metadata["tags"] = json.dumps(place.get("tags", []), ensure_ascii=False)
 
         collection.upsert(
             embeddings=[embedding],

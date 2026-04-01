@@ -27,11 +27,8 @@ def _get_collection():
 # ── LLM: docent 해설 생성 ──────────────────────────────────────────────────────
 
 async def llm_generate_docent(context: str, language: str) -> str:
-    # 아랍어 요청은 영어로 응답
-    response_lang = "English" if language == "ar" else language
-
-    lang_map = {"ko": "Korean", "en": "English", "ja": "Japanese", "zh": "Chinese"}
-    response_lang_label = lang_map.get(response_lang, "English")
+    lang_map = {"ko": "Korean", "en": "English", "ar": "Arabic", "ja": "Japanese", "zh": "Chinese"}
+    response_lang_label = lang_map.get(language, language)
 
     system_prompt = (
         "You are a friendly AR tour guide for foreign visitors in Seoul. "
@@ -58,20 +55,21 @@ def generate_follow_ups(user_message: str, place_data: dict) -> list[str]:
     suggestions = []
     msg_lower = user_message.lower()
 
-    has_floor_info = bool(place_data.get("floor_info"))
-    has_halal = bool(place_data.get("halal_info"))
-    tags = place_data.get("tags", [])
+    has_floor_info   = bool(place_data.get("floor_info"))
+    has_halal        = bool(place_data.get("halal_info"))
+    has_admission    = bool(place_data.get("admission_fee"))
+    has_parking      = bool(place_data.get("parking_info"))
 
-    if "history" not in msg_lower and "historic" in tags:
-        suggestions.append("Tell me more about the history")
     if "floor" not in msg_lower and has_floor_info:
         suggestions.append("What's on each floor?")
     if "halal" not in msg_lower and has_halal:
         suggestions.append("Where can I find halal food nearby?")
+    if "fee" not in msg_lower and "price" not in msg_lower and has_admission:
+        suggestions.append("How much is the admission fee?")
+    if "park" not in msg_lower and has_parking:
+        suggestions.append("Is there parking available?")
     if "eat" not in msg_lower and "restaurant" not in msg_lower:
         suggestions.append("What's nearby to eat?")
-    if "photo" not in msg_lower and "photo-spot" in tags:
-        suggestions.append("What's the best photo spot here?")
     if "prayer" not in msg_lower:
         suggestions.append("Is there a prayer room nearby?")
 
@@ -88,13 +86,16 @@ async def run_place_insight_agent(req: PlaceRequest) -> dict:
     if not result["metadatas"]:
         return {
             "ar_overlay": {
-                "name": req.place_id,
-                "category": "",
-                "floor_info": [],
-                "tags": [],
-                "tourist_tip": "",
-                "halal_info": "",
-                "image_url": "",
+                "name":          req.place_id,
+                "category":      "",
+                "floor_info":    [],
+                "halal_info":    "",
+                "image_url":     "",
+                "homepage":      "",
+                "open_hours":    "",
+                "closed_days":   "",
+                "parking_info":  "",
+                "admission_fee": "",
             },
             "docent": {
                 "speech": "Sorry, I don't have information about this place yet.",
@@ -106,20 +107,22 @@ async def run_place_insight_agent(req: PlaceRequest) -> dict:
 
     # Chroma에서 꺼낸 JSON 문자열 → 파이썬 객체 역직렬화
     floor_info = json.loads(place_data.get("floor_info", "[]"))
-    tags = json.loads(place_data.get("tags", "[]"))
 
     # 2. halal_info
     halal_info = place_data.get("halal_info", "")
 
     # 3. ar_overlay (LLM 없이 RAG 데이터 그대로)
     ar_overlay = {
-        "name": place_data.get("name_ko", ""),
-        "category": place_data.get("category", ""),
-        "floor_info": floor_info,
-        "tags": tags,
-        "tourist_tip": place_data.get("tourist_tip", ""),
-        "halal_info": halal_info,
-        "image_url": place_data.get("image_url", ""),
+        "name":          place_data.get("name_ko", ""),
+        "category":      place_data.get("category", ""),
+        "floor_info":    floor_info,
+        "halal_info":    halal_info,
+        "image_url":     place_data.get("image_url", ""),
+        "homepage":      place_data.get("homepage", ""),
+        "open_hours":    place_data.get("open_hours", ""),
+        "closed_days":   place_data.get("closed_days", ""),
+        "parking_info":  place_data.get("parking_info", ""),
+        "admission_fee": place_data.get("admission_fee", ""),
     }
 
     # 4. docent: LLM 자연어 해설 생성
@@ -127,15 +130,21 @@ async def run_place_insight_agent(req: PlaceRequest) -> dict:
 Place: {place_data.get('name_ko', '')}
 Category: {place_data.get('category', '')}
 Description: {place_data.get('description_en', '')}
-Tourist tip: {place_data.get('tourist_tip', '')}
-Tags: {', '.join(tags)}
+Open hours: {place_data.get('open_hours', '')}
+Closed days: {place_data.get('closed_days', '')}
+Admission fee: {place_data.get('admission_fee', '')}
 Halal info: {halal_info}
 User's question: {req.user_message}
 Language: {req.language}
 """.strip()
 
     speech = await llm_generate_docent(context, req.language)
-    follow_ups = generate_follow_ups(req.user_message, {"floor_info": floor_info, "halal_info": halal_info, "tags": tags})
+    follow_ups = generate_follow_ups(req.user_message, {
+        "floor_info":   floor_info,
+        "halal_info":   halal_info,
+        "admission_fee": place_data.get("admission_fee", ""),
+        "parking_info":  place_data.get("parking_info", ""),
+    })
 
     return {
         "ar_overlay": ar_overlay,

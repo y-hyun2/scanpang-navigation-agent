@@ -3,6 +3,8 @@ from schemas.navigation import NavRequest, RouteRequest
 from agents.navigation_agent import run_search_agent, run_route_agent
 from schemas.place import PlaceRequest
 from agents.place_insight_agent import run_place_insight_agent
+from schemas.store import StoreRequest
+from tools.store_tools import get_store_detail
 
 app = FastAPI(title="ScanPang Navigation API")
 
@@ -30,3 +32,11 @@ async def place_query(req: PlaceRequest):
     ARCore가 인식한 건물 place_id → AR 오버레이 데이터 + TTS 도슨트 해설 반환
     """
     return await run_place_insight_agent(req)
+
+
+@app.post("/place/store")
+async def place_store(req: StoreRequest):
+    """
+    사용자가 층별 매장 탭 → 매장 상세 정보 반환 (Kakao on-demand + Chroma 캐싱)
+    """
+    return await get_store_detail(req.place_id, req.store_name, req.user_lat, req.user_lng)
