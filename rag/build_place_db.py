@@ -111,7 +111,8 @@ async def fetch_tour_info(place_name: str) -> dict:
         for ctype in TOUR_CONTENT_TYPES:
             params = {**common_params, "keyword": place_name, "contentTypeId": ctype, "areaCode": 1}
             resp = await client.get(f"{base}/searchKeyword2", params=params)
-            items = resp.json().get("response", {}).get("body", {}).get("items", {}).get("item", [])
+            items_raw = resp.json().get("response", {}).get("body", {}).get("items", {})
+            items = items_raw.get("item", []) if isinstance(items_raw, dict) else []
             if items:
                 first = items[0] if isinstance(items, list) else items
                 content_id = first.get("contentid")
@@ -126,18 +127,20 @@ async def fetch_tour_info(place_name: str) -> dict:
         resp = await client.get(f"{base}/detailCommon2", params={
             **common_params, "contentId": content_id, "overviewYN": "Y", "homepageYN": "Y"
         })
-        detail = resp.json().get("response", {}).get("body", {}).get("items", {}).get("item", {})
+        detail_raw = resp.json().get("response", {}).get("body", {}).get("items", {})
+        detail = detail_raw.get("item", {}) if isinstance(detail_raw, dict) else {}
         if isinstance(detail, list):
-            detail = detail[0]
-        overview_ko = detail.get("overview", "")
-        homepage = detail.get("homepage", "")
+            detail = detail[0] if detail else {}
+        overview_ko = detail.get("overview", "") if isinstance(detail, dict) else ""
+        homepage = detail.get("homepage", "") if isinstance(detail, dict) else ""
 
         # detailIntro2: contentTypeId별 운영시간, 휴무일, 주차, 입장료
         field_map = INTRO_FIELD_MAP.get(content_type_id, {})
         resp2 = await client.get(f"{base}/detailIntro2", params={
             **common_params, "contentId": content_id, "contentTypeId": content_type_id
         })
-        intro = resp2.json().get("response", {}).get("body", {}).get("items", {}).get("item", {})
+        intro_raw = resp2.json().get("response", {}).get("body", {}).get("items", {})
+        intro = intro_raw.get("item", {}) if isinstance(intro_raw, dict) else {}
         if isinstance(intro, list):
             intro = intro[0] if intro else {}
 
