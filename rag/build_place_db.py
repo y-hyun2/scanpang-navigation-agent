@@ -35,7 +35,7 @@ TARGET_PLACES = [
     {"place_id": "myeongdong_cathedral",        "name": "명동성당",            "building_key": None, "tour_keyword": None},
     {"place_id": "lotte_dept_myeongdong",       "name": "롯데백화점 명동본점",  "building_key": None, "tour_keyword": "롯데백화점 본점"},
     {"place_id": "shinsegae_myeongdong",        "name": "신세계백화점 본점",    "building_key": None, "tour_keyword": None},
-    {"place_id": "noon_square_myeongdong",      "name": "명동 눈스퀘어",       "building_key": None, "tour_keyword": None},
+    {"place_id": "noon_square_myeongdong",      "name": "명동 눈스퀘어",       "building_key": None, "tour_keyword": "눈스퀘어"},
     {"place_id": "cgv_myeongdong",              "name": "CGV 명동",            "building_key": None, "tour_keyword": None},
     {"place_id": "myeongdong_art_theater",      "name": "명동예술극장",         "building_key": None, "tour_keyword": None},
     {"place_id": "n_seoul_tower",               "name": "N서울타워",            "building_key": None, "tour_keyword": "서울타워"},
@@ -112,7 +112,7 @@ async def fetch_tour_info(place_name: str, tour_keyword: Optional[str] = None) -
 
     async with httpx.AsyncClient() as client:
         for ctype in TOUR_CONTENT_TYPES:
-            params = {**common_params, "keyword": keyword, "contentTypeId": ctype, "areaCode": 1}
+            params = {**common_params, "keyword": keyword, "contentTypeId": ctype}
             resp = await client.get(f"{base}/searchKeyword2", params=params)
             items_raw = resp.json().get("response", {}).get("body", {}).get("items", {})
             items = items_raw.get("item", []) if isinstance(items_raw, dict) else []
