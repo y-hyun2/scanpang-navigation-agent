@@ -32,14 +32,17 @@ openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 # building_key: 모두 None → Kakao 도로명주소 → Juso API로 bdMgtSn 자동 획득
 # tour_keyword: TourAPI searchKeyword2 검색어 (None이면 name 그대로 사용)
 TARGET_PLACES = [
-    {"place_id": "myeongdong_cathedral",        "name": "명동성당",            "building_key": None, "tour_keyword": None},
-    {"place_id": "lotte_dept_myeongdong",       "name": "롯데백화점 명동본점",  "building_key": None, "tour_keyword": "롯데백화점 본점"},
-    {"place_id": "shinsegae_myeongdong",        "name": "신세계백화점 본점",    "building_key": None, "tour_keyword": None},
-    {"place_id": "noon_square_myeongdong",      "name": "명동 눈스퀘어",       "building_key": None, "tour_keyword": "눈스퀘어"},
-    {"place_id": "cgv_myeongdong",              "name": "CGV 명동",            "building_key": None, "tour_keyword": None},
-    {"place_id": "myeongdong_art_theater",      "name": "명동예술극장",         "building_key": None, "tour_keyword": None},
-    {"place_id": "n_seoul_tower",               "name": "N서울타워",            "building_key": None, "tour_keyword": "서울타워"},
-    {"place_id": "lotte_city_hotel_myeongdong", "name": "롯데시티호텔 명동",    "building_key": None, "tour_keyword": None},
+    # sigungu_code: 중구=140, 용산구=170 (서울특별시 lDongRegnCd=11 고정)
+    {"place_id": "myeongdong_cathedral",        "name": "명동성당",            "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
+    {"place_id": "lotte_dept_myeongdong",       "name": "롯데백화점 명동본점",  "building_key": None, "tour_keyword": "롯데백화점 본점", "sigungu_code": 140},
+    {"place_id": "shinsegae_myeongdong",        "name": "신세계백화점 본점",    "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
+    {"place_id": "noon_square_myeongdong",      "name": "명동 눈스퀘어",       "building_key": None, "tour_keyword": "눈스퀘어",        "sigungu_code": 140},
+    {"place_id": "myeongdong_art_theater",      "name": "명동예술극장",         "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
+    {"place_id": "n_seoul_tower",               "name": "N서울타워",            "building_key": None, "tour_keyword": "서울타워",        "sigungu_code": 170},
+    {"place_id": "lotte_city_hotel_myeongdong", "name": "롯데시티호텔 명동",    "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
+    {"place_id": "unesco_hall_myeongdong",      "name": "유네스코회관",          "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
+    {"place_id": "post_tower_myeongdong",       "name": "포스트타워",            "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
+    {"place_id": "daishin_finance_center",      "name": "대신파이낸스센터",      "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
 ]
 
 MYEONGDONG_LNG = 126.9822
@@ -97,7 +100,7 @@ INTRO_FIELD_MAP = {
     39: {"open_hours": "opentimefood",     "closed_days": "restdatefood",     "parking_info": "parkingfood",     "admission_fee": ""},
 }
 
-async def fetch_tour_info(place_name: str, tour_keyword: Optional[str] = None) -> dict:
+async def fetch_tour_info(place_name: str, tour_keyword: Optional[str] = None, sigungu_code: Optional[int] = None) -> dict:
     base = "https://apis.data.go.kr/B551011/KorService2"
     common_params = {
         "serviceKey": TOUR_API_KEY,
@@ -113,16 +116,24 @@ async def fetch_tour_info(place_name: str, tour_keyword: Optional[str] = None) -
 
     async with httpx.AsyncClient() as client:
         for ctype in TOUR_CONTENT_TYPES:
-            params = {**common_params, "keyword": keyword, "contentTypeId": ctype}
+            params = {**common_params, "keyword": keyword, "contentTypeId": ctype, "numOfRows": 100}
+            if sigungu_code:
+                params["lDongRegnCd"] = 11  # 서울특별시 고정
+                params["lDongSignguCd"] = sigungu_code
             resp = await client.get(f"{base}/searchKeyword2", params=params)
             items_raw = resp.json().get("response", {}).get("body", {}).get("items", {})
             items = items_raw.get("item", []) if isinstance(items_raw, dict) else []
-            if items:
-                first = items[0] if isinstance(items, list) else items
-                content_id = first.get("contentid")
-                content_type_id = ctype
-                image_url = first.get("firstimage", "")
-                break
+            if isinstance(items, dict):
+                items = [items]
+            if not items:
+                continue
+            # title이 keyword와 정확히 일치하는 항목 우선 선택, 없으면 첫 번째
+            matched = next((it for it in items if it.get("title", "") == keyword), None)
+            selected = matched or items[0]
+            content_id = selected.get("contentid")
+            content_type_id = ctype
+            image_url = selected.get("firstimage", "")
+            break
 
         if not content_id:
             return {}
@@ -258,6 +269,7 @@ async def build_all_places() -> list[dict]:
         name = target["name"]
         building_key = target["building_key"]
         tour_keyword = target.get("tour_keyword")
+        sigungu_code = target.get("sigungu_code")
         print(f"[{place_id}] 수집 중...")
 
         # Step 1: Kakao 기본 정보
@@ -281,7 +293,7 @@ async def build_all_places() -> list[dict]:
         }
 
         # Step 2: TourAPI description + 상세정보
-        tour = await fetch_tour_info(name, tour_keyword)
+        tour = await fetch_tour_info(name, tour_keyword, sigungu_code)
         if tour.get("description_en"):
             place["description_en"] = tour["description_en"]
             place["image_url"]      = tour.get("image_url", "")
