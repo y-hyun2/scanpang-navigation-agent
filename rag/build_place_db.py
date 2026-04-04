@@ -262,10 +262,14 @@ async def fetch_floor_info(building_key: str) -> list:
         "pageNo": 1,
         "type": "json",
     }
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, params=params)
-        resp.raise_for_status()
-        data = resp.json()
+    async with httpx.AsyncClient(timeout=60) as client:
+        try:
+            resp = await client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            print(f"    소상공인 API 오류 ({building_key}): {e}")
+            return []
 
     items = data.get("body", {}).get("items", [])
     floor_map: dict[str, list] = {}
@@ -375,6 +379,12 @@ def save_to_chroma(all_places: list[dict]):
     from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
     ef = DefaultEmbeddingFunction()
     client = chromadb.PersistentClient(path="./chroma_db")
+    # 기존 컬렉션 삭제 후 재생성 → 제거된 건물(CGV 등) 데이터 완전 정리
+    try:
+        client.delete_collection("place_info")
+        print("  기존 place_info 컬렉션 삭제 완료")
+    except Exception:
+        pass
     collection = client.get_or_create_collection("place_info", embedding_function=ef)
 
     for place in all_places:
