@@ -19,8 +19,9 @@ _collection = None
 def _get_collection():
     global _chroma_client, _collection
     if _collection is None:
+        from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
         _chroma_client = chromadb.PersistentClient(path="./chroma_db")
-        _collection = _chroma_client.get_or_create_collection("place_info")
+        _collection = _chroma_client.get_or_create_collection("place_info", embedding_function=DefaultEmbeddingFunction())
     return _collection
 
 

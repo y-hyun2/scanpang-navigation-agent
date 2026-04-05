@@ -32,18 +32,19 @@ openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 # building_key: 모두 None → Kakao 도로명주소 → Juso API로 bdMgtSn 자동 획득
 # tour_keyword: TourAPI searchKeyword2 검색어 (None이면 name 그대로 사용)
+# kakao_name:   Kakao 검색 시 사용할 건물명 (None이면 name 그대로 사용)
 TARGET_PLACES = [
     # sigungu_code: 중구=140, 용산구=170 (서울특별시 lDongRegnCd=11 고정)
-    {"place_id": "myeongdong_cathedral",        "name": "명동성당",            "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
-    {"place_id": "lotte_dept_myeongdong",       "name": "롯데백화점 명동본점",  "building_key": None, "tour_keyword": "롯데백화점 본점", "sigungu_code": 140},
-    {"place_id": "shinsegae_myeongdong",        "name": "신세계백화점 본점",    "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
-    {"place_id": "noon_square_myeongdong",      "name": "명동 눈스퀘어",       "building_key": None, "tour_keyword": "눈스퀘어",        "sigungu_code": 140},
-    {"place_id": "myeongdong_art_theater",      "name": "명동예술극장",         "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
-    {"place_id": "n_seoul_tower",               "name": "N서울타워",            "building_key": None, "tour_keyword": "서울타워",        "sigungu_code": 170},
-    {"place_id": "lotte_city_hotel_myeongdong", "name": "롯데시티호텔 명동",    "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
-    {"place_id": "unesco_hall_myeongdong",      "name": "유네스코회관",          "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
-    {"place_id": "post_tower_myeongdong",       "name": "포스트타워",            "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
-    {"place_id": "daishin_finance_center",      "name": "대신파이낸스센터",      "building_key": None, "tour_keyword": None,             "sigungu_code": 140},
+    {"place_id": "myeongdong_cathedral",        "name": "명동성당",            "building_key": None, "tour_keyword": None,             "kakao_name": None,     "sigungu_code": 140},
+    {"place_id": "lotte_dept_myeongdong",       "name": "롯데백화점 명동본점",  "building_key": None, "tour_keyword": "롯데백화점 본점", "kakao_name": None,     "sigungu_code": 140},
+    {"place_id": "shinsegae_myeongdong",        "name": "신세계백화점 본점",    "building_key": None, "tour_keyword": None,             "kakao_name": None,     "sigungu_code": 140},
+    {"place_id": "noon_square_myeongdong",      "name": "명동 눈스퀘어",       "building_key": None, "tour_keyword": "눈스퀘어",        "kakao_name": "이랜드 눈스퀘어몰명동점", "sigungu_code": 140},
+    {"place_id": "myeongdong_art_theater",      "name": "명동예술극장",         "building_key": None, "tour_keyword": None,             "kakao_name": None,     "sigungu_code": 140},
+    {"place_id": "n_seoul_tower",               "name": "N서울타워",            "building_key": None, "tour_keyword": "서울타워",        "kakao_name": None,     "sigungu_code": 170},
+    {"place_id": "lotte_city_hotel_myeongdong", "name": "롯데시티호텔 명동",    "building_key": None, "tour_keyword": None,             "kakao_name": None,     "sigungu_code": 140},
+    {"place_id": "unesco_hall_myeongdong",      "name": "유네스코회관",          "building_key": None, "tour_keyword": None,             "kakao_name": None,     "sigungu_code": 140},
+    {"place_id": "post_tower_myeongdong",       "name": "포스트타워",            "building_key": None, "tour_keyword": None,             "kakao_name": None,     "sigungu_code": 140},
+    {"place_id": "daishin_finance_center",      "name": "대신파이낸스센터",      "building_key": None, "tour_keyword": None,             "kakao_name": None,     "sigungu_code": 140},
 ]
 
 MYEONGDONG_LNG = 126.9822
@@ -52,15 +53,16 @@ MYEONGDONG_LAT = 37.5636
 
 # ── Step 1: Kakao Local 기본 정보 ──────────────────────────────────────────────
 
-async def fetch_kakao_info(place_name: str) -> dict:
+async def fetch_kakao_info(place_name: str, kakao_name: Optional[str] = None) -> dict:
+    query = kakao_name or place_name
     url = "https://dapi.kakao.com/v2/local/search/keyword.json"
     headers = {"Authorization": f"KakaoAK {KAKAO_REST_API_KEY}"}
     params = {
-        "query": place_name,
+        "query": query,
         "x": str(MYEONGDONG_LNG),
         "y": str(MYEONGDONG_LAT),
         "radius": 2000,
-        "size": 1,
+        "size": 10,
     }
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers=headers, params=params)
@@ -70,7 +72,9 @@ async def fetch_kakao_info(place_name: str) -> dict:
     docs = data.get("documents", [])
     if not docs:
         return {}
-    doc = docs[0]
+    # 정확히 일치하는 건물명 우선, 없으면 첫 번째 결과
+    matched = next((d for d in docs if d.get("place_name") == query), None)
+    doc = matched or docs[0]
     cat_parts = doc.get("category_name", "").split(" > ")
     return {
         "name_ko": doc.get("place_name", place_name),
@@ -316,14 +320,15 @@ async def build_all_places() -> list[dict]:
         name = target["name"]
         building_key = target["building_key"]
         tour_keyword = target.get("tour_keyword")
+        kakao_name = target.get("kakao_name")
         sigungu_code = target.get("sigungu_code")
         print(f"[{place_id}] 수집 중...")
 
         # Step 1: Kakao 기본 정보
-        kakao = await fetch_kakao_info(name)
+        kakao = await fetch_kakao_info(name, kakao_name)
         place = {
             "place_id": place_id,
-            "name_ko": kakao.get("name_ko", name),
+            "name_ko": name,  # 공식 건물명 고정 (Kakao 반환값 무시)
             "category": kakao.get("category", ""),
             "lat": kakao.get("lat", MYEONGDONG_LAT),
             "lng": kakao.get("lng", MYEONGDONG_LNG),
