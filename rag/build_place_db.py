@@ -1,7 +1,7 @@
 """
 build_place_db.py
 서버 실행 전 1회만 실행하는 스크립트.
-명동 주요 건물 8개의 정보를 수집하여 ChromaDB에 저장.
+명동 주요 건물 10개의 정보를 수집하여 ChromaDB에 저장.
 
 실행 방법:
     cd scanpang-navigation-agent
@@ -285,7 +285,18 @@ async def fetch_floor_info(building_key: str) -> list:
             label = f"{store_name} ({biz_type})" if biz_type else store_name
             floor_map.setdefault(floor, []).append(label)
 
-    return [{"floor": f, "stores": s} for f, s in floor_map.items()]
+    def floor_sort_key(f: str):
+        if f == "기타":
+            return (1, 9999)
+        f_stripped = f.lstrip("B").lstrip("b")
+        try:
+            num = int(f_stripped)
+            return (0, -num) if f.upper().startswith("B") else (0, num)
+        except ValueError:
+            return (1, 0)
+
+    sorted_floors = sorted(floor_map.items(), key=lambda x: floor_sort_key(x[0]))
+    return [{"floor": f, "stores": s} for f, s in sorted_floors]
 
 
 # ── Step 4: Juso API → building_key 자동 획득 ─────────────────────────────────
