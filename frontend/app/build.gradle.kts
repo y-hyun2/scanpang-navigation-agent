@@ -52,9 +52,11 @@ android {
         val vworldKey = localProperties.getProperty("VWORLD_API_KEY") ?: ""
         val kakaoKey = localProperties.getProperty("KAKAO_API_KEY") ?: ""
         val arcoreKey = localProperties.getProperty("ARCORE_API_KEY") ?: ""
+        val serverUrl = localProperties.getProperty("SERVER_URL") ?: "http://10.0.2.2:8000/"
 
         buildConfigField("String", "VWORLD_API_KEY", "\"$vworldKey\"")
         buildConfigField("String", "KAKAO_API_KEY", "\"$kakaoKey\"")
+        buildConfigField("String", "SERVER_URL", "\"$serverUrl\"")
 
         manifestPlaceholders["arcoreApiKey"] = arcoreKey
     }

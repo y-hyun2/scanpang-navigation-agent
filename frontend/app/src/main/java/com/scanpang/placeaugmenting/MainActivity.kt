@@ -83,7 +83,7 @@ interface ScanpangApi {
 
 private val scanpangApi: ScanpangApi by lazy {
     Retrofit.Builder()
-        .baseUrl("http://10.0.2.2:8000/")  // 에뮬레이터 → localhost:8000
+        .baseUrl(BuildConfig.SERVER_URL)  // local.properties의 SERVER_URL 값 사용
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(ScanpangApi::class.java)
