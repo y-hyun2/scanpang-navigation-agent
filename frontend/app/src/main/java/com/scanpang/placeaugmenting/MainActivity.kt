@@ -69,7 +69,8 @@ data class ArOverlay(
     val closed_days: String,
     val homepage: String,
     val parking_info: String,
-    val admission_fee: String
+    val admission_fee: String,
+    val is_estimated: Boolean = false
 )
 
 data class Docent(val speech: String, val follow_up_suggestions: List<String>)
@@ -548,6 +549,27 @@ fun GeospatialARScreen() {
                             color = Color.LightGray,
                             fontSize = 13.sp
                         )
+                    }
+
+                    // AI 추정 정보 경고 뱃지
+                    if (overlay?.is_estimated == true) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF3B2A00), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("⚠️", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "AI가 이미지를 분석한 추정 정보입니다. 정확하지 않을 수 있습니다.",
+                                color = Color(0xFFFFBE0B),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
