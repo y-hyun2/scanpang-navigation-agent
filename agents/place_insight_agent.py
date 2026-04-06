@@ -101,6 +101,73 @@ def generate_follow_ups(user_message: str, place_data: dict) -> list[str]:
     return suggestions[:3]
 
 
+# ── GPT-4V fallback: ARCore 미인식 건물 처리 ──────────────────────────────────
+
+async def gpt4v_analyze_building(image_base64: str, user_message: str, language: str) -> dict:
+    """
+    ARCore가 건물을 인식하지 못했을 때 GPT-4V로 이미지 분석.
+    간판·외관을 읽어 건물 기본 정보와 도슨트 해설을 생성.
+    RAG 데이터가 아닌 LLM 추론이므로 is_estimated=True 플래그 포함.
+    """
+    lang_map = {"ko": "Korean", "en": "English", "ar": "Arabic", "ja": "Japanese", "zh": "Chinese"}
+    response_lang = lang_map.get(language, "English")
+
+    system_prompt = (
+        "You are an AR tour guide assistant. "
+        "Analyze the image to identify the building or location shown. "
+        "Read any visible signs, text, or architectural features. "
+        f"Respond in {response_lang}. "
+        "Be honest if you are uncertain — say 'This appears to be...' rather than stating facts definitively. "
+        "Keep the response concise (2-3 sentences) for text-to-speech."
+    )
+
+    user_prompt = (
+        f"User's question: {user_message}\n\n"
+        "Please: 1) Identify the building/location, 2) Briefly describe what it is and what visitors can do there, "
+        "3) Mention any practically useful info visible (floor numbers, entrances, facilities)."
+    )
+
+    response = await openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_base64}", "detail": "high"},
+                    },
+                ],
+            },
+        ],
+        max_tokens=300,
+    )
+
+    speech = response.choices[0].message.content.strip()
+
+    return {
+        "ar_overlay": {
+            "name":          "",
+            "category":      "",
+            "floor_info":    [],
+            "halal_info":    "",
+            "image_url":     "",
+            "homepage":      "",
+            "open_hours":    "",
+            "closed_days":   "",
+            "parking_info":  "",
+            "admission_fee": "",
+            "is_estimated":  True,   # RAG 아닌 GPT-4V 추론임을 프론트에 알림
+        },
+        "docent": {
+            "speech": speech,
+            "follow_up_suggestions": [],
+        },
+    }
+
+
 # ── Main agent ────────────────────────────────────────────────────────────────
 
 async def run_place_insight_agent(req: PlaceRequest) -> dict:
@@ -114,6 +181,9 @@ async def run_place_insight_agent(req: PlaceRequest) -> dict:
     # Chroma에서 place_id로 직접 조회
     result = collection.get(ids=[place_id]) if place_id else {"metadatas": []}
     if not result["metadatas"]:
+        # GPT-4V fallback: 이미지가 있으면 분석, 없으면 기본 메시지
+        if req.image_base64:
+            return await gpt4v_analyze_building(req.image_base64, req.user_message, req.language)
         return {
             "ar_overlay": {
                 "name":          req.place_id,
@@ -126,6 +196,7 @@ async def run_place_insight_agent(req: PlaceRequest) -> dict:
                 "closed_days":   "",
                 "parking_info":  "",
                 "admission_fee": "",
+                "is_estimated":  False,
             },
             "docent": {
                 "speech": "Sorry, I don't have information about this place yet.",
@@ -153,6 +224,7 @@ async def run_place_insight_agent(req: PlaceRequest) -> dict:
         "closed_days":   place_data.get("closed_days", ""),
         "parking_info":  place_data.get("parking_info", ""),
         "admission_fee": place_data.get("admission_fee", ""),
+        "is_estimated":  False,  # 공공 API 검증 데이터
     }
 
     # 4. docent: LLM 자연어 해설 생성
