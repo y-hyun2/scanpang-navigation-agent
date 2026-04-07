@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
 
 suspend fun verifyBuildingFromVworld(lat: Double, lng: Double): String? = withContext(Dispatchers.IO) {
     try {
-        val apiKey = "BuildConfig.VWORLD_API_KEY"
+        val apiKey = BuildConfig.VWORLD_API_KEY
         val domain = "http://localhost"
         val urlString = "http://api.vworld.kr/req/wfs?key=$apiKey&domain=$domain&SERVICE=WFS&VERSION=1.1.0&REQUEST=GetFeature&TYPENAME=lt_c_bldginfo&OUTPUTFORMAT=application/json&SRSNAME=EPSG:4326&CQL_FILTER=INTERSECTS(ag_geom,%20POINT($lng%20$lat))"
 
@@ -152,7 +152,7 @@ suspend fun verifyBuildingFromVworld(lat: Double, lng: Double): String? = withCo
 
 suspend fun searchBuildingNameFromKakao(lat: Double, lng: Double): String? = withContext(Dispatchers.IO) {
     try {
-        val kakaoApiKey = "BuildConfig.KAKAO_API_KEY"
+        val kakaoApiKey = BuildConfig.KAKAO_API_KEY
         val urlString = "https://dapi.kakao.com/v2/local/geo/coord2address.json?x=$lng&y=$lat"
 
         val url = URL(urlString)
@@ -285,7 +285,7 @@ fun GeospatialARScreen() {
                         val userLat = pose.latitude
                         val userLng = pose.longitude
 
-                        if (pose.horizontalAccuracy < 2.0) {
+                        if (pose.horizontalAccuracy < 5.0) {
                             trackingMessage = "위치 파악 완료 (오차: ${"%.1f".format(pose.horizontalAccuracy)}m)"
 
                             val results = FloatArray(1)
