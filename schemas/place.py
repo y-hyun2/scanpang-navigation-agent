@@ -4,12 +4,13 @@ from typing import List, Optional
 
 class PlaceRequest(BaseModel):
     place_id: str = ""
-    building_name: Optional[str] = None  # VWorld/Kakao가 반환한 건물명 (프론트에서 사용)
-    image_base64: Optional[str] = None   # ARCore 미인식 시 GPT-4V fallback용 카메라 이미지
-    user_message: str
+    building_name: Optional[str] = None  # 직접 건물명 지정 시 (레거시/테스트용)
+    heading: Optional[float] = None      # ARCore geospatialPose.heading (0=북, 90=동)
+    image_base64: Optional[str] = None   # GPT-4V fallback용 카메라 이미지
+    user_message: str = "이 건물에 대해 알려줘"
     user_lat: float
     user_lng: float
-    language: str = "en"
+    language: str = "ko"
 
 
 class FloorInfo(BaseModel):

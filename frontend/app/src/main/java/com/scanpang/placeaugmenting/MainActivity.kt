@@ -38,13 +38,10 @@ import io.github.sceneview.rememberEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -52,11 +49,11 @@ import kotlin.math.roundToInt
 
 data class PlaceQueryRequest(
     val place_id: String = "",
-    val building_name: String,
-    val user_message: String = "What is this building?",
+    val heading: Double,
+    val user_message: String = "이 건물에 대해 알려줘",
     val user_lat: Double,
     val user_lng: Double,
-    val language: String = "en"
+    val language: String = "ko"
 )
 
 data class FloorInfo(val floor: String, val stores: List<String>)
@@ -119,75 +116,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-suspend fun verifyBuildingFromVworld(lat: Double, lng: Double): String? = withContext(Dispatchers.IO) {
-    try {
-        val apiKey = BuildConfig.VWORLD_API_KEY
-        val domain = "http://localhost"
-        val urlString = "http://api.vworld.kr/req/wfs?key=$apiKey&domain=$domain&SERVICE=WFS&VERSION=1.1.0&REQUEST=GetFeature&TYPENAME=lt_c_bldginfo&OUTPUTFORMAT=application/json&SRSNAME=EPSG:4326&CQL_FILTER=INTERSECTS(ag_geom,%20POINT($lng%20$lat))"
-
-        val url = URL(urlString)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 5000
-        connection.readTimeout = 5000
-
-        if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-            val responseText = connection.inputStream.bufferedReader().use { it.readText() }
-            val jsonObject = JSONObject(responseText)
-            val features = jsonObject.optJSONArray("features")
-
-            if (features != null && features.length() > 0) {
-                val feature = features.getJSONObject(0)
-                val properties = feature.optJSONObject("properties") ?: return@withContext null
-
-                val bldNm = properties.optString("bld_nm", "")
-                return@withContext if (bldNm.isNotEmpty() && bldNm != "null") bldNm else "이름 없는 건물"
-            }
-        }
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
-    return@withContext null
-}
-
-suspend fun searchBuildingNameFromKakao(lat: Double, lng: Double): String? = withContext(Dispatchers.IO) {
-    try {
-        val kakaoApiKey = BuildConfig.KAKAO_API_KEY
-        val urlString = "https://dapi.kakao.com/v2/local/geo/coord2address.json?x=$lng&y=$lat"
-
-        val url = URL(urlString)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.setRequestProperty("Authorization", "KakaoAK $kakaoApiKey")
-        connection.connectTimeout = 3000
-        connection.readTimeout = 3000
-
-        if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-            val responseText = connection.inputStream.bufferedReader().use { it.readText() }
-            val jsonObject = JSONObject(responseText)
-            val documents = jsonObject.optJSONArray("documents")
-
-            if (documents != null && documents.length() > 0) {
-                val document = documents.optJSONObject(0)
-                val roadAddress = document?.optJSONObject("road_address")
-                val buildingName = roadAddress?.optString("building_name", "")
-
-                if (!buildingName.isNullOrEmpty()) {
-                    return@withContext buildingName
-                }
-            }
-        }
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
-    return@withContext null
-}
-
-suspend fun getFinalBuildingName(lat: Double, lng: Double): String = withContext(Dispatchers.IO) {
-    val vworldResult = verifyBuildingFromVworld(lat, lng) ?: return@withContext "알 수 없는 장소"
-    val kakaoBuildingName = searchBuildingNameFromKakao(lat, lng)
-    return@withContext kakaoBuildingName ?: vworldResult
-}
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -231,6 +159,7 @@ fun GeospatialARScreen() {
     val dynamicPlaces = remember { mutableStateListOf<PlaceData>() }
     var selectedPlace by remember { mutableStateOf<PlaceData?>(null) }
     var triggerHitTest by remember { mutableStateOf(false) }
+    var currentHeading by remember { mutableStateOf(0.0) }
 
     val verifiedCache = remember { mutableStateListOf<PlaceData>() }
 
@@ -284,6 +213,7 @@ fun GeospatialARScreen() {
                         val pose = earth.cameraGeospatialPose
                         val userLat = pose.latitude
                         val userLng = pose.longitude
+                        currentHeading = pose.heading
 
                         if (pose.horizontalAccuracy < 5.0) {
                             trackingMessage = "위치 파악 완료 (오차: ${"%.1f".format(pose.horizontalAccuracy)}m)"
@@ -346,30 +276,29 @@ fun GeospatialARScreen() {
                                                 dynamicPlaces.add(placeData)
 
                                                 coroutineScope.launch {
-                                                    val finalName = getFinalBuildingName(targetLat, targetLng)
-
-                                                    // ScanPang 백엔드 호출
                                                     var arOverlay: ArOverlay? = null
                                                     var docentSpeech = ""
+                                                    android.util.Log.d("SCANPANG", "API 호출: heading=${"%.1f".format(currentHeading)}")
                                                     try {
                                                         val response = scanpangApi.queryPlace(
                                                             PlaceQueryRequest(
-                                                                building_name = finalName,
+                                                                heading = currentHeading,
                                                                 user_lat = targetLat,
                                                                 user_lng = targetLng,
-                                                                language = "ko"
                                                             )
                                                         )
+                                                        android.util.Log.d("SCANPANG", "API 응답: name=${response.ar_overlay.name}, floor_info=${response.ar_overlay.floor_info.size}개")
                                                         arOverlay = response.ar_overlay
                                                         docentSpeech = response.docent.speech
                                                     } catch (e: Exception) {
+                                                        android.util.Log.e("SCANPANG", "API 오류: ${e.javaClass.simpleName}: ${e.message}")
                                                         e.printStackTrace()
                                                     }
 
                                                     val index = dynamicPlaces.indexOfFirst { it.id == newId }
                                                     if (index != -1) {
                                                         val finalPlace = dynamicPlaces[index].copy(
-                                                            name = arOverlay?.name?.takeIf { it.isNotEmpty() } ?: finalName,
+                                                            name = arOverlay?.name?.takeIf { it.isNotEmpty() } ?: "알 수 없는 장소",
                                                             details = if (arOverlay != null) "open_hours: ${arOverlay.open_hours}" else "데이터 교차 검증 완료",
                                                             arOverlay = arOverlay,
                                                             docentSpeech = docentSpeech
@@ -386,7 +315,76 @@ fun GeospatialARScreen() {
                                     }
                                 }
                                 if (!foundSurface && recognitionStatus == RecognitionState.SEARCHING) {
-                                    recognitionStatus = RecognitionState.FAILURE
+                                    // Hit test 실패 시 현재 GPS 위치로 앵커 직접 생성 (실외 fallback)
+                                    val targetLat = userLat
+                                    val targetLng = userLng
+                                    val altitude = pose.altitude
+
+                                    geospatialAnchors.values.forEach { it.detach() }
+                                    geospatialAnchors.clear()
+                                    dynamicPlaces.clear()
+
+                                    var cachedPlace: PlaceData? = null
+                                    for (cache in verifiedCache) {
+                                        Location.distanceBetween(targetLat, targetLng, cache.latitude, cache.longitude, results)
+                                        if (results[0] < 2.0f) {
+                                            cachedPlace = cache
+                                            break
+                                        }
+                                    }
+
+                                    val newId = "Target_${System.currentTimeMillis()}"
+                                    val newAnchor = earth.createAnchor(targetLat, targetLng, altitude, 0f, 0f, 0f, 1f)
+                                    geospatialAnchors[newId] = newAnchor
+
+                                    if (cachedPlace != null) {
+                                        dynamicPlaces.add(cachedPlace.copy(id = newId, distance = 0f))
+                                        recognitionStatus = RecognitionState.SUCCESS
+                                    } else {
+                                        val placeData = PlaceData(
+                                            id = newId,
+                                            name = "분석 중...",
+                                            details = "서버와 통신 중.",
+                                            latitude = targetLat,
+                                            longitude = targetLng,
+                                            distance = 0f
+                                        )
+                                        dynamicPlaces.add(placeData)
+
+                                        coroutineScope.launch {
+                                            var arOverlay: ArOverlay? = null
+                                            var docentSpeech = ""
+                                            android.util.Log.d("SCANPANG", "API 호출(fallback): heading=${"%.1f".format(currentHeading)}")
+                                            try {
+                                                val response = scanpangApi.queryPlace(
+                                                    PlaceQueryRequest(
+                                                        heading = currentHeading,
+                                                        user_lat = targetLat,
+                                                        user_lng = targetLng,
+                                                    )
+                                                )
+                                                android.util.Log.d("SCANPANG", "API 응답(fallback): name=${response.ar_overlay.name}, floor_info=${response.ar_overlay.floor_info.size}개")
+                                                arOverlay = response.ar_overlay
+                                                docentSpeech = response.docent.speech
+                                            } catch (e: Exception) {
+                                                android.util.Log.e("SCANPANG", "API 오류(fallback): ${e.javaClass.simpleName}: ${e.message}")
+                                                e.printStackTrace()
+                                            }
+
+                                            val index = dynamicPlaces.indexOfFirst { it.id == newId }
+                                            if (index != -1) {
+                                                val finalPlace = dynamicPlaces[index].copy(
+                                                    name = arOverlay?.name?.takeIf { it.isNotEmpty() } ?: "알 수 없는 장소",
+                                                    details = if (arOverlay != null) "open_hours: ${arOverlay.open_hours}" else "데이터 교차 검증 완료",
+                                                    arOverlay = arOverlay,
+                                                    docentSpeech = docentSpeech
+                                                )
+                                                dynamicPlaces[index] = finalPlace
+                                                verifiedCache.add(finalPlace)
+                                                recognitionStatus = RecognitionState.SUCCESS
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         } else {

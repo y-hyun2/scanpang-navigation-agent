@@ -7,3 +7,4 @@ httpx
 langchain-openai
 sentence-transformers
 pydantic
+shapely
