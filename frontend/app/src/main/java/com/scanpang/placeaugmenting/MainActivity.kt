@@ -38,10 +38,13 @@ import io.github.sceneview.rememberEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
+import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
+import java.util.concurrent.TimeUnit
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -80,8 +83,15 @@ interface ScanpangApi {
 }
 
 private val scanpangApi: ScanpangApi by lazy {
+    val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(40, TimeUnit.SECONDS)  // Overpass API 응답 대기
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .connectionPool(ConnectionPool(5, 4, TimeUnit.SECONDS))  // uvicorn keep-alive(5s)보다 짧게
+        .build()
     Retrofit.Builder()
-        .baseUrl(BuildConfig.SERVER_URL)  // local.properties의 SERVER_URL 값 사용
+        .baseUrl(BuildConfig.SERVER_URL)
+        .client(client)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(ScanpangApi::class.java)

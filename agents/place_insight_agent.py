@@ -1,7 +1,9 @@
 import json
+import math
 import os
 
 import chromadb
+import httpx
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
@@ -11,42 +13,12 @@ from tools.osm_tools import find_building_by_osm
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY", "")
+
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 _chroma_client = None
 _collection = None
-
-# Kakao/OSM 건물명 → place_id 매핑
-BUILDING_NAME_MAP = {
-    "명동대성당": "myeongdong_cathedral",
-    "명동성당": "myeongdong_cathedral",
-    "롯데백화점 본점": "lotte_dept_myeongdong",
-    "롯데백화점 명동본점": "lotte_dept_myeongdong",
-    "롯데시네마 에비뉴엘": "lotte_dept_myeongdong",
-    "롯데영플라자 본점": "lotte_dept_myeongdong",
-    "롯데백화점 롯데문화홀": "lotte_dept_myeongdong",
-    "에비뉴엘 명동": "lotte_dept_myeongdong",
-    "국립극단 명동예술극장": "myeongdong_art_theater",
-    "명동난타극장": "myeongdong_art_theater",
-    "신세계백화점 본점": "shinsegae_myeongdong",
-    "신세계백화점": "shinsegae_myeongdong",
-    "신세계백화점 본점 더 리저브": "shinsegae_myeongdong",
-    "신세계백화점 본점 디 에스테이트": "shinsegae_myeongdong",
-    "회현지하쇼핑센터": "shinsegae_myeongdong",
-    "눈스퀘어": "noon_square_myeongdong",
-    "명동 눈스퀘어": "noon_square_myeongdong",
-    "명동예술극장": "myeongdong_art_theater",
-    "N서울타워": "n_seoul_tower",
-    "남산서울타워": "n_seoul_tower",
-    "서울타워": "n_seoul_tower",
-    "롯데시티호텔 명동": "lotte_city_hotel_myeongdong",
-    "유네스코회관": "unesco_hall_myeongdong",
-    "유네스코회관빌딩": "unesco_hall_myeongdong",
-    "포스트타워": "post_tower_myeongdong",
-    "서울중앙우체국": "post_tower_myeongdong",
-    "대신파이낸스센터": "daishin_finance_center",
-    "Daishin343": "daishin_finance_center",
-}
 
 
 def _get_collection():
@@ -58,6 +30,87 @@ def _get_collection():
             "place_info", embedding_function=DefaultEmbeddingFunction()
         )
     return _collection
+
+
+# ── 거리 계산 (Haversine) ───────────────────────────────────────────────────
+
+def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """두 GPS 좌표 사이의 거리(미터) 반환."""
+    R = 6_371_000
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lng2 - lng1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+# ── 1순위: 좌표 기반 Chroma 조회 ────────────────────────────────────────────
+
+def _find_by_coords(collection, bld_lat: float, bld_lng: float, threshold_m: float = 200.0) -> dict:
+    """
+    Chroma DB에 저장된 건물들과 교차점 좌표의 거리를 계산해
+    가장 가까운 건물(threshold 이내)의 metadata 반환.
+    이름 매핑 없이 좌표만으로 건물을 식별하므로 OSM/Kakao 이름 불일치 문제 없음.
+    """
+    all_docs = collection.get(include=["metadatas", "ids"])
+    best_meta = None
+    best_dist = float("inf")
+
+    for meta, doc_id in zip(all_docs.get("metadatas", []), all_docs.get("ids", [])):
+        lat = meta.get("lat")
+        lng = meta.get("lng")
+        if lat is None or lng is None:
+            continue
+        d = _haversine(bld_lat, bld_lng, lat, lng)
+        if d < best_dist:
+            best_dist = d
+            best_meta = meta
+
+    if best_meta and best_dist <= threshold_m:
+        print(f"[Chroma] 좌표 매칭: {best_meta.get('name_ko', '')} (거리={best_dist:.0f}m)")
+        return best_meta
+
+    print(f"[Chroma] 좌표 매칭 실패 (최근접={best_dist:.0f}m, threshold={threshold_m}m)")
+    return {}
+
+
+# ── 2순위: Kakao coord2address → Chroma 벡터 검색 ───────────────────────────
+
+async def _kakao_coord2building_name(lat: float, lng: float) -> str:
+    """Kakao coord2address API로 좌표 → 건물명 조회."""
+    if not KAKAO_REST_API_KEY:
+        return ""
+    url = "https://dapi.kakao.com/v2/local/geo/coord2address.json"
+    headers = {"Authorization": f"KakaoAK {KAKAO_REST_API_KEY}"}
+    params = {"x": lng, "y": lat, "input_coord": "WGS84"}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers, params=params)
+            data = resp.json()
+        docs = data.get("documents", [])
+        if docs:
+            road = docs[0].get("road_address") or {}
+            return road.get("building_name", "")
+    except Exception as e:
+        print(f"[Kakao] coord2address 오류: {e}")
+    return ""
+
+
+async def _find_by_kakao_coords(collection, bld_lat: float, bld_lng: float) -> dict:
+    """Kakao로 건물명 조회 후 Chroma 벡터 유사도 검색."""
+    kakao_name = await _kakao_coord2building_name(bld_lat, bld_lng)
+    if not kakao_name:
+        return {}
+    print(f"[Kakao] coord2address 결과: {kakao_name!r}")
+    try:
+        q = collection.query(query_texts=[kakao_name], n_results=1)
+        if q["metadatas"] and q["metadatas"][0] and q["distances"][0][0] < 0.6:
+            print(f"[Chroma] 벡터 검색 매칭: {q['metadatas'][0][0].get('name_ko', '')} "
+                  f"(거리={q['distances'][0][0]:.3f})")
+            return q["metadatas"][0][0]
+    except Exception:
+        pass
+    return {}
 
 
 # ── LLM: docent 해설 생성 ──────────────────────────────────────────────────────
@@ -112,62 +165,28 @@ def generate_follow_ups(user_message: str, place_data: dict) -> list[str]:
     return suggestions[:3]
 
 
-# ── place_id 해석: 이름 → place_id 매핑 ───────────────────────────────────────
-
-def _resolve_place_id_from_name(name: str) -> str:
-    """BUILDING_NAME_MAP에서 exact → partial 순으로 place_id 조회."""
-    if not name:
-        return ""
-    pid = BUILDING_NAME_MAP.get(name, "")
-    if pid:
-        return pid
-    for map_key, pid in BUILDING_NAME_MAP.items():
-        if map_key in name or name in map_key:
-            return pid
-    return ""
-
-
 # ── Main agent ────────────────────────────────────────────────────────────────
 
 async def run_place_insight_agent(req: PlaceRequest) -> dict:
     collection = _get_collection()
+    place_data = {}
 
-    # 1. place_id 결정
-    #    우선순위: 직접 전달 > building_name 매핑 > OSM 레이캐스팅 > Chroma 벡터 유사도
-    place_id = req.place_id
+    # OSM 레이캐스팅 → 좌표 기반 매칭 → Kakao fallback
+    if req.heading is not None:
+        osm_name, bld_lat, bld_lng = await find_building_by_osm(
+            req.user_lat, req.user_lng, req.heading
+        )
 
-    if not place_id and req.building_name:
-        place_id = _resolve_place_id_from_name(req.building_name)
+        if bld_lat != 0.0:
+            # 1순위: 폴리곤 중심 좌표 → Chroma 거리 기반 조회
+            place_data = _find_by_coords(collection, bld_lat, bld_lng)
 
-    if not place_id and req.heading is not None:
-        osm_name = await find_building_by_osm(req.user_lat, req.user_lng, req.heading)
-        if osm_name:
-            place_id = _resolve_place_id_from_name(osm_name)
-            # BUILDING_NAME_MAP에 없으면 osm_name 자체로 Chroma 벡터 검색
-            if not place_id:
-                req = req.model_copy(update={"building_name": osm_name})
+            # 2순위: Kakao coord2address → 건물명 → Chroma 벡터 검색
+            if not place_data:
+                place_data = await _find_by_kakao_coords(collection, bld_lat, bld_lng)
 
-    # 2. Chroma에서 place_id로 직접 조회
-    result = collection.get(ids=[place_id]) if place_id else {"metadatas": []}
-
-    # 3. 매핑 실패 시 → Chroma 벡터 유사도 검색
-    building_name_for_search = req.building_name
-    if not result["metadatas"] and building_name_for_search:
-        try:
-            query_result = collection.query(
-                query_texts=[building_name_for_search],
-                n_results=1,
-            )
-            if query_result["metadatas"] and query_result["metadatas"][0]:
-                best_dist = query_result["distances"][0][0]
-                if best_dist < 0.6:
-                    result = {"metadatas": [query_result["metadatas"][0][0]]}
-                    place_id = query_result["ids"][0][0]
-        except Exception:
-            pass
-
-    # 4. 끝내 데이터 없으면 미인식 응답
-    if not result["metadatas"]:
+    # 끝내 데이터 없으면 미인식 응답
+    if not place_data:
         return {
             "ar_overlay": {
                 "name": "",
@@ -188,7 +207,6 @@ async def run_place_insight_agent(req: PlaceRequest) -> dict:
             },
         }
 
-    place_data = result["metadatas"][0]
     floor_info = json.loads(place_data.get("floor_info", "[]"))
     halal_info = place_data.get("halal_info", "")
 
