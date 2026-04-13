@@ -29,11 +29,11 @@
 
         <meta-data
             android:name="com.google.android.ar.API_KEY"
-            android:value="AIzaSyA462SEka74lJEl-RuQ0BGHMKHoFLn34tQ" />
+            android:value="${arcoreApiKey}" />
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyA462SEka74lJEl-RuQ0BGHMKHoFLn34tQ" />
+            android:value="${geoApiKey}" />
 
         <activity
             android:name=".MainActivity"

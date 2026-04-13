@@ -1,5 +1,14 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
+}
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
 }
 
 android {
@@ -12,7 +21,7 @@ android {
 
     buildFeatures {
         viewBinding = true
-        buildConfig = true // 반드시 true여야 BuildConfig 클래스가 생성됨
+        buildConfig = true
     }
     defaultConfig {
         applicationId = "com.hufs.arnavigation_com"
@@ -21,8 +30,17 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "KAKAO_REST_API_KEY", "\"14ac34c144dff1da471c22f22f8acfe3\"")
-        buildConfigField("String", "TMAP_APP_KEY", "\"rhj6r0zXie4q9qnjRlCUt3aLnsb42u4m1QbNOQvn\"")
+
+        val kakaoKey = localProperties.getProperty("KAKAO_REST_API_KEY") ?: ""
+        val tmapKey = localProperties.getProperty("TMAP_APP_KEY") ?: ""
+        val arcoreKey = localProperties.getProperty("ARCORE_API_KEY") ?: ""
+        val geoKey = localProperties.getProperty("GEO_API_KEY") ?: arcoreKey
+
+        buildConfigField("String", "KAKAO_REST_API_KEY", "\"$kakaoKey\"")
+        buildConfigField("String", "TMAP_APP_KEY", "\"$tmapKey\"")
+
+        manifestPlaceholders["arcoreApiKey"] = arcoreKey
+        manifestPlaceholders["geoApiKey"] = geoKey
     }
 
     buildTypes {
