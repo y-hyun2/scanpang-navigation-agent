@@ -51,11 +51,12 @@ import kotlin.math.roundToInt
 // ── ScanPang 백엔드 데이터 클래스 ────────────────────────────────────────────
 
 data class PlaceQueryRequest(
-    val place_id: String = "",
     val heading: Double,
-    val user_message: String = "이 건물에 대해 알려줘",
     val user_lat: Double,
     val user_lng: Double,
+    val user_alt: Double = 0.0,
+    val pitch: Double = 0.0,
+    val user_message: String = "이 건물에 대해 알려줘",
     val language: String = "ko"
 )
 
@@ -85,7 +86,7 @@ interface ScanpangApi {
 private val scanpangApi: ScanpangApi by lazy {
     val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(40, TimeUnit.SECONDS)  // Overpass API 응답 대기
+        .readTimeout(20, TimeUnit.SECONDS)  // 레이캐스팅은 즉시, LLM 도슨트 대기 여유
         .writeTimeout(15, TimeUnit.SECONDS)
         .connectionPool(ConnectionPool(5, 4, TimeUnit.SECONDS))  // uvicorn keep-alive(5s)보다 짧게
         .build()
@@ -170,6 +171,10 @@ fun GeospatialARScreen() {
     var selectedPlace by remember { mutableStateOf<PlaceData?>(null) }
     var triggerHitTest by remember { mutableStateOf(false) }
     var currentHeading by remember { mutableStateOf(0.0) }
+    var currentAltitude by remember { mutableStateOf(0.0) }
+    var currentPitch by remember { mutableStateOf(0.0) }
+    // 한 번이라도 VPS 정밀(<1.5m) 상태에 도달했는지 — 이후 ARCore SLAM이 위치 유지
+    var hasAchievedHighAccuracy by remember { mutableStateOf(false) }
 
     val verifiedCache = remember { mutableStateListOf<PlaceData>() }
 
@@ -224,8 +229,24 @@ fun GeospatialARScreen() {
                         val userLat = pose.latitude
                         val userLng = pose.longitude
                         currentHeading = pose.heading
+                        currentAltitude = pose.altitude
 
-                        if (pose.horizontalAccuracy < 5.0) {
+                        // 쿼터니언 (East-Up-South 좌표계)에서 카메라 pitch 추출
+                        //   quat: [x=E, y=U, z=S, w]
+                        //   forward 벡터 = (qz*2, -2*(q.y*q.z + q.w*q.x), -(1 - 2*(q.x²+q.y²)))
+                        // 간단히 pitch = asin(-forward.y) 로 근사
+                        val q = pose.eastUpSouthQuaternion
+                        val fx = 2f * (q[0] * q[2] + q[3] * q[1])
+                        val fy = 2f * (q[1] * q[2] - q[3] * q[0])
+                        val fz = 1f - 2f * (q[0] * q[0] + q[1] * q[1])
+                        val horiz = kotlin.math.sqrt(fx * fx + fz * fz)
+                        currentPitch = Math.toDegrees(kotlin.math.atan2(-fy.toDouble(), horiz.toDouble()))
+
+                        if (pose.horizontalAccuracy < 1.5) {
+                            hasAchievedHighAccuracy = true
+                        }
+
+                        if (hasAchievedHighAccuracy) {
                             trackingMessage = "위치 파악 완료 (오차: ${"%.1f".format(pose.horizontalAccuracy)}m)"
 
                             val results = FloatArray(1)
@@ -288,13 +309,15 @@ fun GeospatialARScreen() {
                                                 coroutineScope.launch {
                                                     var arOverlay: ArOverlay? = null
                                                     var docentSpeech = ""
-                                                    android.util.Log.d("SCANPANG", "API 호출: heading=${"%.1f".format(currentHeading)}")
+                                                    android.util.Log.d("SCANPANG", "API 호출: heading=${"%.1f".format(currentHeading)} pitch=${"%.1f".format(currentPitch)}")
                                                     try {
                                                         val response = scanpangApi.queryPlace(
                                                             PlaceQueryRequest(
                                                                 heading = currentHeading,
-                                                                user_lat = targetLat,
-                                                                user_lng = targetLng,
+                                                                user_lat = userLat,
+                                                                user_lng = userLng,
+                                                                user_alt = currentAltitude,
+                                                                pitch = currentPitch,
                                                             )
                                                         )
                                                         android.util.Log.d("SCANPANG", "API 응답: name=${response.ar_overlay.name}, floor_info=${response.ar_overlay.floor_info.size}개")
@@ -364,13 +387,15 @@ fun GeospatialARScreen() {
                                         coroutineScope.launch {
                                             var arOverlay: ArOverlay? = null
                                             var docentSpeech = ""
-                                            android.util.Log.d("SCANPANG", "API 호출(fallback): heading=${"%.1f".format(currentHeading)}")
+                                            android.util.Log.d("SCANPANG", "API 호출(fallback): heading=${"%.1f".format(currentHeading)} pitch=${"%.1f".format(currentPitch)}")
                                             try {
                                                 val response = scanpangApi.queryPlace(
                                                     PlaceQueryRequest(
                                                         heading = currentHeading,
-                                                        user_lat = targetLat,
-                                                        user_lng = targetLng,
+                                                        user_lat = userLat,
+                                                        user_lng = userLng,
+                                                        user_alt = currentAltitude,
+                                                        pitch = currentPitch,
                                                     )
                                                 )
                                                 android.util.Log.d("SCANPANG", "API 응답(fallback): name=${response.ar_overlay.name}, floor_info=${response.ar_overlay.floor_info.size}개")
@@ -398,7 +423,7 @@ fun GeospatialARScreen() {
                                 }
                             }
                         } else {
-                            trackingMessage = "VPS 탐색 중... 주변 건물을 비춰주세요. (현재 오차: ${"%.1f".format(pose.horizontalAccuracy)}m)"
+                            trackingMessage = "VPS 정밀 탐색 중... 주변 건물을 비추세요 (현재 오차: ${"%.1f".format(pose.horizontalAccuracy)}m / 1.5m 미만 필요)"
                         }
 
                         val newPositions = mutableMapOf<String, Offset>()
@@ -496,10 +521,12 @@ fun GeospatialARScreen() {
                 onClick = { triggerHitTest = true },
                 modifier = Modifier.height(56.dp).fillMaxWidth(0.7f),
                 shape = RoundedCornerShape(28.dp),
-                enabled = recognitionStatus != RecognitionState.SEARCHING
+                enabled = recognitionStatus != RecognitionState.SEARCHING && hasAchievedHighAccuracy
             ) {
                 if (recognitionStatus == RecognitionState.SEARCHING) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                } else if (!hasAchievedHighAccuracy) {
+                    Text("VPS 정밀 탐색 중...", fontWeight = FontWeight.Bold)
                 } else {
                     Text("바라보는 지점 정보 가져오기", fontWeight = FontWeight.Bold)
                 }

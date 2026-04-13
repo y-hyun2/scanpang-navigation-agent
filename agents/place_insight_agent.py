@@ -1,19 +1,17 @@
 import json
-import math
 import os
 
 import chromadb
-import httpx
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
+from shapely.geometry import Point, Polygon
 
 from schemas.place import PlaceRequest
-from tools.osm_tools import find_building_by_osm
+from tools.building_raycast import find_building_by_raycast
 
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY", "")
 
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
@@ -32,84 +30,48 @@ def _get_collection():
     return _collection
 
 
-# ── 거리 계산 (Haversine) ───────────────────────────────────────────────────
+# ── place_info 매칭: "VWorld 폴리곤에 place_info 좌표가 포함되는가" ────────
 
-def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """두 GPS 좌표 사이의 거리(미터) 반환."""
-    R = 6_371_000
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lng2 - lng1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-
-# ── 1순위: 좌표 기반 Chroma 조회 ────────────────────────────────────────────
-
-def _find_by_coords(collection, bld_lat: float, bld_lng: float, threshold_m: float = 200.0) -> dict:
+def _find_in_place_info_by_polygon(collection, vworld_meta: dict, tolerance_m: float = 15.0) -> dict:
     """
-    Chroma DB에 저장된 건물들과 교차점 좌표의 거리를 계산해
-    가장 가까운 건물(threshold 이내)의 metadata 반환.
-    이름 매핑 없이 좌표만으로 건물을 식별하므로 OSM/Kakao 이름 불일치 문제 없음.
+    VWorld 건물 폴리곤에 place_info 타겟 건물의 Kakao 좌표가 포함되는지 검사.
+    Kakao 좌표가 출입구라 폴리곤 경계 살짝 바깥에 찍힐 수 있으므로
+    tolerance_m (기본 15m) 이내 오차는 허용.
+
+    tolerance가 크면 바로 옆 건물도 같은 건물로 오매칭되므로 보수적으로 설정.
     """
-    all_docs = collection.get(include=["metadatas", "ids"])
+    try:
+        polygon_coords = json.loads(vworld_meta.get("polygon_2d", "[]"))
+        polygon = Polygon(polygon_coords)
+        if not polygon.is_valid or polygon.is_empty:
+            return {}
+    except Exception:
+        return {}
+
+    all_docs = collection.get(include=["metadatas"])
     best_meta = None
-    best_dist = float("inf")
+    best_dist_m = float("inf")
 
-    for meta, doc_id in zip(all_docs.get("metadatas", []), all_docs.get("ids", [])):
+    for meta in all_docs.get("metadatas", []) or []:
         lat = meta.get("lat")
         lng = meta.get("lng")
         if lat is None or lng is None:
             continue
-        d = _haversine(bld_lat, bld_lng, lat, lng)
-        if d < best_dist:
-            best_dist = d
+        dist_deg = polygon.distance(Point(lng, lat))
+        dist_m = dist_deg * 111_320.0
+        if dist_m < best_dist_m:
+            best_dist_m = dist_m
             best_meta = meta
 
-    if best_meta and best_dist <= threshold_m:
-        print(f"[Chroma] 좌표 매칭: {best_meta.get('name_ko', '')} (거리={best_dist:.0f}m)")
+    vworld_name = vworld_meta.get("bld_nm") or "(이름 없음)"
+    if best_meta and best_dist_m <= tolerance_m:
+        tag = "내부" if best_dist_m == 0.0 else f"경계+{best_dist_m:.0f}m"
+        print(f"[place_info] 폴리곤 매칭({tag}): {best_meta.get('name_ko', '')} "
+              f"← VWorld {vworld_name!r}")
         return best_meta
 
-    print(f"[Chroma] 좌표 매칭 실패 (최근접={best_dist:.0f}m, threshold={threshold_m}m)")
-    return {}
-
-
-# ── 2순위: Kakao coord2address → Chroma 벡터 검색 ───────────────────────────
-
-async def _kakao_coord2building_name(lat: float, lng: float) -> str:
-    """Kakao coord2address API로 좌표 → 건물명 조회."""
-    if not KAKAO_REST_API_KEY:
-        return ""
-    url = "https://dapi.kakao.com/v2/local/geo/coord2address.json"
-    headers = {"Authorization": f"KakaoAK {KAKAO_REST_API_KEY}"}
-    params = {"x": lng, "y": lat, "input_coord": "WGS84"}
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers=headers, params=params)
-            data = resp.json()
-        docs = data.get("documents", [])
-        if docs:
-            road = docs[0].get("road_address") or {}
-            return road.get("building_name", "")
-    except Exception as e:
-        print(f"[Kakao] coord2address 오류: {e}")
-    return ""
-
-
-async def _find_by_kakao_coords(collection, bld_lat: float, bld_lng: float) -> dict:
-    """Kakao로 건물명 조회 후 Chroma 벡터 유사도 검색."""
-    kakao_name = await _kakao_coord2building_name(bld_lat, bld_lng)
-    if not kakao_name:
-        return {}
-    print(f"[Kakao] coord2address 결과: {kakao_name!r}")
-    try:
-        q = collection.query(query_texts=[kakao_name], n_results=1)
-        if q["metadatas"] and q["metadatas"][0] and q["distances"][0][0] < 0.6:
-            print(f"[Chroma] 벡터 검색 매칭: {q['metadatas'][0][0].get('name_ko', '')} "
-                  f"(거리={q['distances'][0][0]:.3f})")
-            return q["metadatas"][0][0]
-    except Exception:
-        pass
+    print(f"[place_info] VWorld 폴리곤 {vworld_name!r}과 place_info 거리 "
+          f"최소 {best_dist_m:.0f}m > tolerance={tolerance_m:.0f}m")
     return {}
 
 
@@ -169,23 +131,46 @@ def generate_follow_ups(user_message: str, place_data: dict) -> list[str]:
 
 async def run_place_insight_agent(req: PlaceRequest) -> dict:
     collection = _get_collection()
+
+    # 1) VWorld 폴리곤에 3D 레이캐스팅 → 바라보는 건물의 중심 좌표
+    vworld_meta = find_building_by_raycast(
+        user_lat=req.user_lat,
+        user_lng=req.user_lng,
+        heading=req.heading,
+        user_alt=req.user_alt,
+        pitch=req.pitch,
+    )
+
     place_data = {}
+    bld_name_from_vworld = ""
 
-    # OSM 레이캐스팅 → 좌표 기반 매칭 → Kakao fallback
-    if req.heading is not None:
-        osm_name, bld_lat, bld_lng = await find_building_by_osm(
-            req.user_lat, req.user_lng, req.heading
-        )
+    if vworld_meta:
+        bld_name_from_vworld = vworld_meta.get("bld_nm") or ""
+        # 2) place_info(관리 10개 건물) 중 이 폴리곤 내부에 좌표가 있는 건물 매칭
+        place_data = _find_in_place_info_by_polygon(collection, vworld_meta)
 
-        if bld_lat != 0.0:
-            # 1순위: 폴리곤 중심 좌표 → Chroma 거리 기반 조회
-            place_data = _find_by_coords(collection, bld_lat, bld_lng)
+    # 끝내 데이터 없으면: VWorld 이름만으로 최소 응답 구성
+    if not place_data and bld_name_from_vworld:
+        return {
+            "ar_overlay": {
+                "name": bld_name_from_vworld,
+                "category": "",
+                "floor_info": [],
+                "halal_info": "",
+                "image_url": "",
+                "homepage": "",
+                "open_hours": "",
+                "closed_days": "",
+                "parking_info": "",
+                "admission_fee": "",
+                "is_estimated": True,
+            },
+            "docent": {
+                "speech": f"{bld_name_from_vworld}입니다. 이 건물에 대한 상세 정보는 아직 준비되지 않았습니다.",
+                "follow_up_suggestions": [],
+            },
+        }
 
-            # 2순위: Kakao coord2address → 건물명 → Chroma 벡터 검색
-            if not place_data:
-                place_data = await _find_by_kakao_coords(collection, bld_lat, bld_lng)
-
-    # 끝내 데이터 없으면 미인식 응답
     if not place_data:
         return {
             "ar_overlay": {
