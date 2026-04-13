@@ -125,7 +125,7 @@ fun ScanPangTabBar(
                 .padding(
                     top = tabPillHeight - fabBottomFromPillTop - fabGapAndLabel,
                 ),
-            horizontalAlignment = Alignment.CenterVertically,
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Box(
@@ -134,8 +134,6 @@ fun ScanPangTabBar(
                     .shadow(ScanPangElevation.Md, CircleShape)
                     .background(c.primary, CircleShape)
                     .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = androidx.compose.material3.ripple(bounded = true, radius = fabDiameter / 2),
                         onClick = onExplorePress,
                     ),
                 contentAlignment = Alignment.Center,
@@ -174,11 +172,7 @@ private fun TabItem(
     Column(
         modifier = modifier
             .height(ScanPangSpacing.S14 + ScanPangSpacing.S2)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
+            .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
