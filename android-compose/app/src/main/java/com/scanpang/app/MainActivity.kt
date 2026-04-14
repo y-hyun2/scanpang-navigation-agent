@@ -4,7 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.scanpang.app.navigation.ScanPangRoot
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.navigation.compose.rememberNavController
+import com.scanpang.app.navigation.AppNavHost
 import com.scanpang.app.ui.theme.ScanPangTheme
 
 class MainActivity : ComponentActivity() {
@@ -13,7 +16,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ScanPangTheme {
-                ScanPangRoot()
+                val navController = rememberNavController()
+                AppNavHost(
+                    navController = navController,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }

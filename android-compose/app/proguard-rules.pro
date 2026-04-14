@@ -1,1 +1,1 @@
-# ScanPang — add rules when enabling minify
+# Add project-specific ProGuard rules here.

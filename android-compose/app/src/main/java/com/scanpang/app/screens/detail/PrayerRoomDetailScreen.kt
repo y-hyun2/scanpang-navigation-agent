@@ -1,87 +1,239 @@
 package com.scanpang.app.screens.detail
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AccessTime
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Phone
+import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.scanpang.app.data.HalalViewModel
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.navigation.NavController
+import com.scanpang.app.navigation.AppRoutes
+import com.scanpang.app.ui.theme.ScanPangColors
+import com.scanpang.app.ui.theme.ScanPangDimens
+import com.scanpang.app.ui.theme.ScanPangShapes
+import com.scanpang.app.ui.theme.ScanPangSpacing
+import com.scanpang.app.ui.theme.ScanPangType
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Figma: 기도실 상세 (`290:1425`)
+ */
 @Composable
 fun PrayerRoomDetailScreen(
-    title: String,
-    onBack: () -> Unit,
+    navController: NavController,
     modifier: Modifier = Modifier,
-    halalVm: HalalViewModel = viewModel(),
 ) {
-    val rooms by halalVm.prayerRooms.collectAsState()
-    LaunchedEffect(Unit) { if (rooms.isEmpty()) halalVm.loadPrayerRooms() }
-    val room = rooms.firstOrNull { it.name == title }
-
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = Color.White,
-        topBar = {
-            TopAppBar(
-                title = { Text(room?.name ?: title, fontWeight = FontWeight.Bold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "뒤로") } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White),
-            )
-        },
-    ) { inner ->
-        if (room == null) {
-            Box(Modifier.padding(inner).fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            Column(
-                Modifier.padding(inner).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(ScanPangColors.Surface)
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding(),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(ScanPangDimens.detailPhotoHeroHeight)
+                .background(ScanPangColors.DetailHeroImagePlaceholder),
+        ) {
+            IconButton(
+                onClick = { navController.popBackStack() },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(ScanPangSpacing.sm),
             ) {
-                // 이용 상태
-                Row(
-                    Modifier.fillMaxWidth()
-                        .background(if (room.availability_status == "open") Color(0xFFE8F5E9) else Color(0xFFFFF3E0), RoundedCornerShape(8.dp))
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Surface(
+                    shape = CircleShape,
+                    color = ScanPangColors.ArOverlayWhite93,
+                    shadowElevation = ScanPangDimens.arPoiCardShadowElevation,
                 ) {
-                    Icon(if (room.availability_status == "open") Icons.Default.CheckCircle else Icons.Default.Info, null,
-                        tint = if (room.availability_status == "open") Color(0xFF2E7D32) else Color(0xFFE65100))
-                    Text(if (room.availability_status == "open") "현재 이용 가능" else "이용 가능 여부 확인 필요",
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (room.availability_status == "open") Color(0xFF2E7D32) else Color(0xFFE65100))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "뒤로",
+                        modifier = Modifier.padding(ScanPangSpacing.sm),
+                        tint = ScanPangColors.OnSurfaceStrong,
+                    )
                 }
-                // 시설
-                Text("시설 정보", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("wudu" to "우두시설", "gender_separation" to "남녀분리", "prayer_mat" to "기도매트", "quran_available" to "꾸란").forEach { (key, label) ->
-                        val on = room.facilities[key] == true
-                        Box(Modifier.background(if (on) Color(0xFFE3F2FD) else Color(0xFFF5F5F5), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 6.dp)) {
-                            Text(label, fontSize = 12.sp, color = if (on) Color(0xFF1565C0) else Color.Gray, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
-                        }
-                    }
-                }
-                Divider(color = Color(0xFFEEEEEE))
-                Text("상세 정보", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                if (room.floor.isNotEmpty()) { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Icon(Icons.Default.Layers, null, Modifier.size(20.dp), tint = Color.Gray); Column { Text("층", fontSize = 12.sp, color = Color.Gray); Text(room.floor) } } }
-                if (room.open_hours.isNotEmpty()) { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Icon(Icons.Default.Schedule, null, Modifier.size(20.dp), tint = Color.Gray); Column { Text("운영시간", fontSize = 12.sp, color = Color.Gray); Text(room.open_hours) } } }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Icon(Icons.Default.Place, null, Modifier.size(20.dp), tint = Color.Gray); Column { Text("주소", fontSize = 12.sp, color = Color.Gray); Text(room.address) } }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Icon(Icons.Default.NearMe, null, Modifier.size(20.dp), tint = Color.Gray); Column { Text("거리", fontSize = 12.sp, color = Color.Gray); Text("${room.distance_m.toInt()}m") } }
-                Spacer(Modifier.height(80.dp))
             }
+        }
+        Column(
+            modifier = Modifier.padding(horizontal = ScanPangDimens.screenHorizontal),
+            verticalArrangement = Arrangement.spacedBy(ScanPangDimens.detailSectionSpacing),
+        ) {
+            Spacer(modifier = Modifier.height(ScanPangSpacing.md))
+            Text(
+                text = "명동 공중기도실",
+                style = ScanPangType.detailRestaurantTitle24,
+                color = ScanPangColors.OnSurfaceStrong,
+            )
+            Text(
+                text = "도보 3분 · 지하 1층",
+                style = ScanPangType.detailMetaSubtitle13,
+                color = ScanPangColors.OnSurfaceMuted,
+            )
+            Surface(
+                shape = ScanPangShapes.badge6,
+                color = ScanPangColors.TrustPillBackground,
+                border = BorderStroke(
+                    ScanPangDimens.borderHairline,
+                    ScanPangColors.OutlineSubtle,
+                ),
+            ) {
+                Row(
+                    modifier = Modifier.padding(
+                        horizontal = ScanPangSpacing.sm,
+                        vertical = ScanPangDimens.badgePadVertical,
+                    ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(ScanPangSpacing.xs),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(ScanPangDimens.icon14),
+                        tint = ScanPangColors.StatusOpen,
+                    )
+                    Text(
+                        text = "이용 가능",
+                        style = ScanPangType.badge9SemiBold,
+                        color = ScanPangColors.TrustPillText,
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ScanPangSpacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = {
+                        navController.navigate(AppRoutes.ArNavMap) { launchSingleTop = true }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(ScanPangDimens.detailCtaHeight),
+                    shape = ScanPangShapes.radius12,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ScanPangColors.Primary,
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Text(
+                        text = "길안내 시작",
+                        style = ScanPangType.body15Medium,
+                    )
+                }
+                OutlinedButton(
+                    onClick = { },
+                    modifier = Modifier.size(ScanPangDimens.detailCtaSide),
+                    shape = ScanPangShapes.radius12,
+                    border = BorderStroke(
+                        ScanPangDimens.borderHairline,
+                        ScanPangColors.OutlineSubtle,
+                    ),
+                    contentPadding = PaddingValues(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Phone,
+                        contentDescription = "전화",
+                        tint = ScanPangColors.OnSurfaceStrong,
+                    )
+                }
+            }
+            HorizontalDivider(color = ScanPangColors.OutlineSubtle)
+            Text(
+                text = "소개",
+                style = ScanPangType.detailSectionTitle15,
+                color = ScanPangColors.OnSurfaceStrong,
+            )
+            Text(
+                text = "명동 거리 중심부에 위치한 무슬림 방문객을 위한 기도 공간입니다. 세정 시설과 키블라 표시가 준비되어 있습니다.",
+                style = ScanPangType.detailIntro13,
+                color = ScanPangColors.OnSurfaceMuted,
+            )
+            Text(
+                text = "상세 정보",
+                style = ScanPangType.detailSectionTitle15,
+                color = ScanPangColors.OnSurfaceStrong,
+            )
+            PrayerDetailInfoLine(
+                icon = Icons.Rounded.Place,
+                label = "주소",
+                value = "서울특별시 중구 명동8나길 27 지하 1층",
+            )
+            PrayerDetailInfoLine(
+                icon = Icons.Rounded.AccessTime,
+                label = "이용 시간",
+                value = "10:00 – 20:00",
+            )
+            Spacer(modifier = Modifier.height(ScanPangDimens.detailContentBottomPad))
+        }
+    }
+}
+
+@Composable
+private fun PrayerDetailInfoLine(
+    icon: ImageVector,
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(ScanPangSpacing.md),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(ScanPangDimens.icon18),
+            tint = ScanPangColors.OnSurfaceMuted,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(ScanPangDimens.icon5),
+        ) {
+            Text(
+                text = label,
+                style = ScanPangType.meta11Medium,
+                color = ScanPangColors.OnSurfacePlaceholder,
+            )
+            Text(
+                text = value,
+                style = ScanPangType.detailIntro13,
+                color = ScanPangColors.OnSurfaceStrong,
+            )
         }
     }
 }

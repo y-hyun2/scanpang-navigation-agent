@@ -7,14 +7,10 @@ import retrofit2.http.POST
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
-// ── API 인터페이스 ──────────────────────────────────────────────────────────
-
 interface ScanPangApiService {
     @POST("halal/query")
     suspend fun halalQuery(@Body request: HalalRequest): HalalResponse
 }
-
-// ── 싱글톤 클라이언트 ───────────────────────────────────────────────────────
 
 object ScanPangClient {
     // 에뮬레이터: 10.0.2.2 = 호스트 머신의 localhost
@@ -35,8 +31,6 @@ object ScanPangClient {
             .create(ScanPangApiService::class.java)
     }
 }
-
-// ── 요청/응답 모델 ──────────────────────────────────────────────────────────
 
 data class HalalRequest(
     val category: String = "",
@@ -59,49 +53,26 @@ data class HalalResponse(
 )
 
 data class PrayerTimeData(
-    val fajr: String,
-    val dhuhr: String,
-    val asr: String,
-    val maghrib: String,
-    val isha: String,
-    val hijri_date: String,
-    val gregorian_date: String,
+    val fajr: String, val dhuhr: String, val asr: String,
+    val maghrib: String, val isha: String,
+    val hijri_date: String, val gregorian_date: String,
 )
 
-data class QiblaData(
-    val direction: Double,
-    val lat: Double,
-    val lng: Double,
-)
+data class QiblaData(val direction: Double, val lat: Double, val lng: Double)
 
 data class HalalRestaurant(
-    val restaurant_id: String,
-    val name_ko: String,
-    val name_en: String,
-    val halal_type: String,
-    val muslim_cooks_available: Boolean?,
-    val no_alcohol_sales: Boolean?,
-    val cuisine_type: List<String>,
-    val menu_examples: List<String>,
-    val distance_m: Double,
-    val lat: Double,
-    val lng: Double,
-    val address: String,
-    val phone: String,
-    val opening_hours: String,
-    val break_time: String,
-    val last_order: String,
+    val restaurant_id: String, val name_ko: String, val name_en: String,
+    val halal_type: String, val muslim_cooks_available: Boolean?,
+    val no_alcohol_sales: Boolean?, val cuisine_type: List<String>,
+    val menu_examples: List<String>, val distance_m: Double,
+    val lat: Double, val lng: Double, val address: String,
+    val phone: String, val opening_hours: String,
+    val break_time: String, val last_order: String,
 )
 
 data class PrayerRoomDetail(
-    val name: String,
-    val name_en: String,
-    val distance_m: Double,
-    val lat: Double,
-    val lng: Double,
-    val address: String,
-    val floor: String,
-    val open_hours: String,
-    val facilities: Map<String, Boolean>,
-    val availability_status: String,
+    val name: String, val name_en: String, val distance_m: Double,
+    val lat: Double, val lng: Double, val address: String,
+    val floor: String, val open_hours: String,
+    val facilities: Map<String, Boolean>, val availability_status: String,
 )

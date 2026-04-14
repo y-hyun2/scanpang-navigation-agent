@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class HalalViewModel : ViewModel() {
-
     private val _prayerTimes = MutableStateFlow<PrayerTimeData?>(null)
     val prayerTimes: StateFlow<PrayerTimeData?> = _prayerTimes.asStateFlow()
 
@@ -25,22 +24,13 @@ class HalalViewModel : ViewModel() {
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
-    init {
-        loadPrayerTimesAndQibla()
-    }
+    init { loadPrayerTimesAndQibla() }
 
     fun loadPrayerTimesAndQibla() {
         viewModelScope.launch {
             try {
-                val ptResp = ScanPangClient.api.halalQuery(
-                    HalalRequest(category = "prayer_time")
-                )
-                _prayerTimes.value = ptResp.prayer_times
-
-                val qResp = ScanPangClient.api.halalQuery(
-                    HalalRequest(category = "qibla")
-                )
-                _qibla.value = qResp.qibla
+                _prayerTimes.value = ScanPangClient.api.halalQuery(HalalRequest(category = "prayer_time")).prayer_times
+                _qibla.value = ScanPangClient.api.halalQuery(HalalRequest(category = "qibla")).qibla
             } catch (e: Exception) {
                 Log.e("HalalVM", "기도시간/키블라 로드 실패: ${e.message}")
             }
@@ -51,10 +41,9 @@ class HalalViewModel : ViewModel() {
         viewModelScope.launch {
             _loading.value = true
             try {
-                val resp = ScanPangClient.api.halalQuery(
+                _restaurants.value = ScanPangClient.api.halalQuery(
                     HalalRequest(category = "restaurant", halal_type = halalType)
-                )
-                _restaurants.value = resp.restaurants
+                ).restaurants
             } catch (e: Exception) {
                 Log.e("HalalVM", "식당 로드 실패: ${e.message}")
             }
@@ -66,10 +55,9 @@ class HalalViewModel : ViewModel() {
         viewModelScope.launch {
             _loading.value = true
             try {
-                val resp = ScanPangClient.api.halalQuery(
+                _prayerRooms.value = ScanPangClient.api.halalQuery(
                     HalalRequest(category = "prayer_room")
-                )
-                _prayerRooms.value = resp.prayer_rooms
+                ).prayer_rooms
             } catch (e: Exception) {
                 Log.e("HalalVM", "기도실 로드 실패: ${e.message}")
             }
