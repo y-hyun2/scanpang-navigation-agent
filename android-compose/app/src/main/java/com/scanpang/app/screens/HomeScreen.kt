@@ -102,14 +102,14 @@ fun HomeScreen(
                 .statusBarsPadding()
                 .verticalScroll(rememberScrollState()),
         ) {
-            HomeTopSection(navController = navController)
+            HomeTopSection(navController = navController, qiblaText = qiblaText, nextPrayerText = nextPrayerText)
             HomeBottomScrollSection()
         }
     }
 }
 
 @Composable
-private fun HomeTopSection(navController: NavController) {
+private fun HomeTopSection(navController: NavController, qiblaText: String, nextPrayerText: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
