@@ -28,6 +28,7 @@ class ArOverlay(BaseModel):
     closed_days: str
     parking_info: str
     admission_fee: str
+    is_estimated: bool = False
 
 
 class Docent(BaseModel):
