@@ -9,10 +9,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.NoDrinks
-import androidx.compose.material.icons.rounded.Restaurant
-import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -44,12 +40,16 @@ fun SearchResultsScreen(
     viewModel: ScanPangViewModel = viewModel(),
 ) {
     val displayQuery = searchQuery.trim().ifEmpty { "검색" }
-    val restaurants by viewModel.restaurants.collectAsState()
+    val navSearchResult by viewModel.navSearchResult.collectAsState()
     val loading by viewModel.loading.collectAsState()
 
     LaunchedEffect(displayQuery) {
-        viewModel.loadRestaurants()
+        if (displayQuery != "검색") {
+            viewModel.searchNavigation(displayQuery, 37.5636, 126.9822)
+        }
     }
+
+    val candidates = navSearchResult?.candidates ?: emptyList()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -73,7 +73,7 @@ fun SearchResultsScreen(
             }
             item {
                 Text(
-                    text = "'$displayQuery' 검색 결과 ${restaurants.size}개",
+                    text = "'$displayQuery' 검색 결과 ${candidates.size}개",
                     style = ScanPangType.link13,
                     color = ScanPangColors.OnSurfaceMuted,
                 )
@@ -85,26 +85,15 @@ fun SearchResultsScreen(
                     }
                 }
             }
-            items(restaurants) { restaurant ->
-                val badgeKind = when (restaurant.halal_type.uppercase()) {
-                    "HALAL MEAT", "HALAL_MEAT" -> SearchResultBadgeKind.HalalMeat
-                    "SEAFOOD" -> SearchResultBadgeKind.Seafood
-                    "VEGGIE" -> SearchResultBadgeKind.Veggie
-                    "SALAM SEOUL", "SALAM_SEOUL" -> SearchResultBadgeKind.SalamSeoul
-                    else -> SearchResultBadgeKind.HalalMeat
-                }
+            items(candidates) { candidate ->
                 SearchResultPlaceCard(
-                    title = restaurant.name_ko,
-                    badgeKind = badgeKind,
-                    badgeLabel = restaurant.halal_type.uppercase(),
-                    cuisineLabel = restaurant.cuisine,
-                    distance = "${restaurant.distance_m}m",
+                    title = candidate.name,
+                    badgeKind = if (candidate.recommended) SearchResultBadgeKind.HalalMeat else SearchResultBadgeKind.Seafood,
+                    badgeLabel = if (candidate.recommended) "추천" else "",
+                    cuisineLabel = candidate.address,
+                    distance = "",
                     isOpen = true,
-                    trustTags = buildList {
-                        add(SearchResultTrustTag("할랄 인증", Icons.Rounded.Verified))
-                        if (restaurant.muslim_cooks_available) add(SearchResultTrustTag("무슬림 조리사", Icons.Rounded.Restaurant))
-                        if (restaurant.no_alcohol_sales) add(SearchResultTrustTag("주류 미판매", Icons.Rounded.NoDrinks))
-                    },
+                    trustTags = emptyList(),
                     onClick = {
                         navController.navigate(AppRoutes.RestaurantDetail) { launchSingleTop = true }
                     },
