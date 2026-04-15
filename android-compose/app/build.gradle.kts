@@ -89,8 +89,9 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
 
-    // ARCore + SceneView (AR Navigation)
+    // ARCore + SceneView (AR Navigation + AR Explore)
     implementation("io.github.sceneview:arsceneview:2.3.3")
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
     implementation("com.google.ar:core:1.53.0")
     implementation("com.google.android.gms:play-services-maps:19.0.0")
     implementation("androidx.appcompat:appcompat:1.7.0")

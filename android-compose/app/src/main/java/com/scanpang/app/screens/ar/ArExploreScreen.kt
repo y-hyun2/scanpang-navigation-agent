@@ -66,8 +66,10 @@ import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.scanpang.app.ar.ArExploreTtsController
 import com.scanpang.app.ar.ArSpeechRecognizerHelper
+import android.content.Intent
 import com.scanpang.app.ar.ScanPangAgentService
 import com.scanpang.app.ar.sendVoiceMessage
+import com.scanpang.app.ar.explore.PlaceAugmentingActivity
 import com.scanpang.app.data.remote.ScanPangViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
@@ -107,6 +109,11 @@ fun ArExploreScreen(
 ) {
     val placeResult by viewModel.placeResult.collectAsState()
     val context = LocalContext.current
+
+    // AR 탐색 Activity 실행 (ARCore VPS + building_raycast + place/query)
+    LaunchedEffect(Unit) {
+        context.startActivity(Intent(context, PlaceAugmentingActivity::class.java))
+    }
     val appContext = context.applicationContext
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
