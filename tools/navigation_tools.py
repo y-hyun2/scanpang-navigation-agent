@@ -16,8 +16,12 @@ async def _call_tmap_poi(params: dict) -> list[dict]:
     raw_pois = data.get("searchPoiInfo", {}).get("pois", {}).get("poi", [])
     if not raw_pois:
         return []
+
+    # 검색 키워드 추출 (params에서)
+    search_keyword = params.get("searchKeyword", "")
+
     results = []
-    for poi in raw_pois[:5]:
+    for poi in raw_pois[:20]:  # 더 많이 가져와서 정확 매칭 찾기
         results.append({
             "id": poi.get("id", ""),
             "name": poi.get("name", ""),
@@ -25,7 +29,14 @@ async def _call_tmap_poi(params: dict) -> list[dict]:
             "pnsLon": poi.get("pnsLon") or poi.get("noorLon"),
             "address": f"{poi.get('upperAddrName','')} {poi.get('middleAddrName','')} {poi.get('lowerAddrName','')} {poi.get('detailAddrName','')}".strip(),
         })
-    return results
+
+    # 정확히 일치하는 POI를 맨 앞으로
+    exact_matches = [p for p in results if p["name"] == search_keyword]
+    contains_matches = [p for p in results if search_keyword in p["name"] and p not in exact_matches]
+    others = [p for p in results if p not in exact_matches and p not in contains_matches]
+    sorted_results = exact_matches + contains_matches + others
+
+    return sorted_results[:5]
 
 
 async def search_poi(
@@ -41,7 +52,7 @@ async def search_poi(
         "version": 1,
         "searchKeyword": keyword,
         "searchType": "all",
-        "count": 5,
+        "count": 20,
         "appKey": TMAP_KEY,
     }
 
