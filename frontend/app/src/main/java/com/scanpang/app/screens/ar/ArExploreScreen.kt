@@ -144,7 +144,16 @@ fun ArExploreScreen(
     viewModel: ScanPangViewModel = viewModel(),
 ) {
     val placeResult by viewModel.placeResult.collectAsState()
+    val convenienceResult by viewModel.convenienceResult.collectAsState()
     val context = LocalContext.current
+
+    // 카테고리 라벨 → convenience API category key 매핑
+    val categoryKeyMap = mapOf(
+        "쇼핑" to "shopping", "편의점" to "convenience_store", "식당" to "restaurant",
+        "카페" to "cafe", "환전소" to "exchange", "은행" to "bank", "ATM" to "atm",
+        "병원" to "hospital", "지하철역" to "subway", "화장실" to "restroom",
+        "물품보관함" to "locker", "약국" to "pharmacy",
+    )
 
     val appContext = context.applicationContext
     val snackbarHostState = remember { SnackbarHostState() }
@@ -296,6 +305,26 @@ fun ArExploreScreen(
         onDispose {
             geospatialAnchors.values.forEach { it.detach() }
             geospatialAnchors.clear()
+        }
+    }
+
+    // convenience 결과 → 동적 POI로 추가
+    LaunchedEffect(convenienceResult) {
+        convenienceResult?.facilities?.forEach { facility ->
+            val alreadyExists = dynamicPois.any { it.name == facility.name }
+            if (!alreadyExists && facility.lat != 0.0 && facility.lng != 0.0) {
+                val newId = "conv_${facility.name}_${System.currentTimeMillis()}"
+                dynamicPois.add(
+                    DynamicPoi(
+                        id = newId,
+                        name = facility.name,
+                        category = convenienceResult?.category ?: "",
+                        distance = facility.distance_m.toFloat(),
+                        latitude = facility.lat,
+                        longitude = facility.lng,
+                    )
+                )
+            }
         }
     }
 
@@ -637,7 +666,18 @@ fun ArExploreScreen(
                                         }
                                 },
                                 onReset = { categorySelection = emptySet() },
-                                onApply = { isFilterOpen = false },
+                                onApply = {
+                                    isFilterOpen = false
+                                    // 선택된 카테고리로 convenience/query 호출
+                                    categorySelection.forEach { label ->
+                                        val apiCategory = categoryKeyMap[label] ?: return@forEach
+                                        viewModel.searchConvenience(
+                                            category = apiCategory,
+                                            lat = if (currentLat != 0.0) currentLat else 37.5636,
+                                            lng = if (currentLng != 0.0) currentLng else 126.9822,
+                                        )
+                                    }
+                                },
                             )
                         }
                     }
