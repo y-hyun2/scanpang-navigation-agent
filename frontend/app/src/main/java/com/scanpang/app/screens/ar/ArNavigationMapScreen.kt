@@ -63,6 +63,7 @@ fun ArNavigationMapScreen(
             }
         }
         context.startActivity(intent)
+        navController.popBackStack()
     }
 
     val routeResult by viewModel.navRouteResult.collectAsState()
