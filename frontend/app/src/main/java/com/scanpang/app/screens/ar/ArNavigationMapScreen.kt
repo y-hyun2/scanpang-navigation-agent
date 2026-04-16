@@ -55,7 +55,10 @@ fun ArNavigationMapScreen(
     // AR Navigation Activity 실행 (ARCore 3D 경로 렌더링)
     val context = LocalContext.current
     LaunchedEffect(Unit) {
-        context.startActivity(Intent(context, ArNavigationActivity::class.java))
+        val intent = Intent(context, ArNavigationActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        context.startActivity(intent)
     }
 
     val routeResult by viewModel.navRouteResult.collectAsState()
