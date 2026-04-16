@@ -68,6 +68,10 @@ object AppRoutes {
         return "$RestaurantDetail/$encodedName/$encodedAddr"
     }
     const val PrayerRoomDetail = "prayer_room_detail"
+    fun prayerRoomDetailRoute(name: String): String {
+        val encoded = URLEncoder.encode(name, StandardCharsets.UTF_8.name())
+        return "$PrayerRoomDetail/$encoded"
+    }
     const val TouristDetail = "tourist_detail"
     const val ShoppingDetail = "shopping_detail"
     const val ConvenienceDetail = "convenience_detail"
@@ -131,6 +135,13 @@ fun AppNavHost(
             RestaurantDetailScreen(navController = navController, placeName = name, placeAddress = address)
         }
         composable(AppRoutes.PrayerRoomDetail) { PrayerRoomDetailScreen(navController = navController) }
+        composable(
+            route = "${AppRoutes.PrayerRoomDetail}/{name}",
+            arguments = listOf(navArgument("name") { type = NavType.StringType; defaultValue = "" }),
+        ) { entry ->
+            val name = runCatching { URLDecoder.decode(entry.arguments?.getString("name").orEmpty(), StandardCharsets.UTF_8.name()) }.getOrDefault("")
+            PrayerRoomDetailScreen(navController = navController, placeName = name)
+        }
         composable(AppRoutes.TouristDetail) { TouristSpotDetailScreen(navController = navController) }
         composable(AppRoutes.ShoppingDetail) { ShoppingDetailScreen(navController = navController) }
         composable(AppRoutes.ConvenienceDetail) { ConvenienceStoreDetailScreen(navController = navController) }

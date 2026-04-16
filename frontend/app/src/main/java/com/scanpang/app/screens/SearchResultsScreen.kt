@@ -2,7 +2,9 @@ package com.scanpang.app.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,19 +12,26 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Verified
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
 import com.scanpang.app.data.Place
 import com.scanpang.app.data.RestaurantPlace
+import com.scanpang.app.data.remote.NavCandidate
+import com.scanpang.app.data.remote.ScanPangViewModel
 import com.scanpang.app.ui.theme.ScanPangType
 import com.scanpang.app.components.ScanPangSearchFieldFilled
 import com.scanpang.app.components.SearchResultBadgeKind
@@ -121,6 +130,24 @@ private fun placeMatchesQuery(p: Place, raw: String): Boolean {
         p.tags.any { it.contains(q, ignoreCase = true) }
 }
 
+private fun NavCandidate.toResultRow(): ResultRow {
+    val item = ResultItem(
+        id = poi_id,
+        title = name,
+        badgeKind = SearchResultBadgeKind.General,
+        badgeLabel = "장소",
+        cuisine = address.take(30),
+        distance = "",
+        isOpen = true,
+        trust = if (recommended) listOf(SearchResultTrustTag("추천", Icons.Rounded.Star)) else emptyList(),
+    )
+    return ResultRow(
+        id = "nav:$poi_id",
+        item = item,
+        detailRoute = AppRoutes.arNavMapRoute(name),
+    )
+}
+
 private fun buildAllSearchRows(query: String): List<ResultRow> = buildList {
     DummyData.halalRestaurants.forEach { rp ->
         if (restaurantMatchesQuery(rp, query)) {
@@ -180,13 +207,27 @@ fun SearchResultsScreen(
         else -> navQueryTrimmed
     }
 
+    val viewModel: ScanPangViewModel = viewModel()
+    val navSearchResult by viewModel.navSearchResult.collectAsState()
+    val isLoading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(navQueryTrimmed) {
+        if (navQueryTrimmed.isNotBlank()) {
+            viewModel.searchNavigation(navQueryTrimmed, 37.5636, 126.9822)
+        }
+    }
+
     fun signalSearchTabClear() {
         runCatching {
             navController.getBackStackEntry(AppRoutes.Search).savedStateHandle[AppRoutes.SearchSavedStateClearQueryKey] =
                 true
         }
     }
-    val resultRows = remember(navQueryTrimmed) { buildAllSearchRows(navQueryTrimmed) }
+
+    val resultRows = remember(navQueryTrimmed, navSearchResult) {
+        val apiRows = navSearchResult?.candidates?.map { it.toResultRow() } ?: emptyList()
+        apiRows.ifEmpty { buildAllSearchRows(navQueryTrimmed) }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -227,7 +268,14 @@ fun SearchResultsScreen(
                     color = ScanPangColors.OnSurfaceMuted,
                 )
             }
-            if (resultRows.isEmpty()) {
+            if (isLoading) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = ScanPangColors.Primary)
+                    }
+                }
+            }
+            if (resultRows.isEmpty() && !isLoading) {
                 item {
                     Text(
                         text = "조건에 맞는 장소가 없습니다. 다른 검색어를 시도해 보세요.",

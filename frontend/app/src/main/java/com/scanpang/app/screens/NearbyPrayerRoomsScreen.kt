@@ -32,7 +32,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -42,9 +45,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
 import com.scanpang.app.data.Place
+import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.toPlace
 import com.scanpang.app.navigation.AppRoutes
 import com.scanpang.app.ui.theme.ScanPangColors
 import com.scanpang.app.ui.theme.ScanPangDimens
@@ -59,12 +65,11 @@ private fun parseDistanceMetersForSort(line: String): Int {
     return Int.MAX_VALUE / 4
 }
 
-private fun prayerRoomsForFilter(filterIndex: Int): List<Place> {
-    val all = DummyData.prayerRooms
+private fun prayerRoomsForFilter(filterIndex: Int, rooms: List<Place>): List<Place> {
     return when (filterIndex) {
-        1 -> all.sortedBy { parseDistanceMetersForSort(it.distance) }
-        2 -> all.filter { room -> room.tags.any { it.contains("남녀") } }
-        else -> all
+        1 -> rooms.sortedBy { parseDistanceMetersForSort(it.distance) }
+        2 -> rooms.filter { room -> room.tags.any { it.contains("남녀") } }
+        else -> rooms
     }
 }
 
@@ -76,9 +81,20 @@ fun NearbyPrayerRoomsScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
 ) {
+    val viewModel: ScanPangViewModel = viewModel()
+    val apiPrayerRooms by viewModel.prayerRooms.collectAsState()
+    val isLoading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.loadPrayerRooms() }
+
     var filterIndex by remember { mutableIntStateOf(0) }
     val filterLabels = listOf("전체", "거리순", "남녀 분리")
-    val prayerPlaces = remember(filterIndex) { prayerRoomsForFilter(filterIndex) }
+
+    val allRooms = remember(apiPrayerRooms) {
+        val fromApi = apiPrayerRooms.map { it.toPlace() }
+        fromApi.ifEmpty { DummyData.prayerRooms }
+    }
+    val prayerPlaces = remember(filterIndex, allRooms) { prayerRoomsForFilter(filterIndex, allRooms) }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = ScanPangColors.Surface,
@@ -217,6 +233,13 @@ fun NearbyPrayerRoomsScreen(
                     }
                 }
             }
+            if (isLoading && allRooms == DummyData.prayerRooms) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = ScanPangColors.Primary)
+                    }
+                }
+            }
             items(
                 items = prayerPlaces,
                 key = { it.id },
@@ -225,7 +248,9 @@ fun NearbyPrayerRoomsScreen(
                     title = place.name,
                     subtitle = "${place.distance} · ${place.address}",
                     onClick = {
-                        navController.navigate(AppRoutes.PrayerRoomDetail) { launchSingleTop = true }
+                        navController.navigate(
+                            AppRoutes.prayerRoomDetailRoute(place.name)
+                        ) { launchSingleTop = true }
                     },
                 )
             }

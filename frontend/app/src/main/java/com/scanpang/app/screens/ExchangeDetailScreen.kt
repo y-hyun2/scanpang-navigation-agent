@@ -22,13 +22,19 @@ import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
+import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.toPlace
 import com.scanpang.app.data.ExchangeRate
 import com.scanpang.app.data.SavedPlaceNavTarget
 import com.scanpang.app.data.galleryModels
@@ -44,8 +50,18 @@ fun ExchangeDetailScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
 ) {
+    val viewModel: ScanPangViewModel = viewModel()
+    val convenienceResult by viewModel.convenienceResult.collectAsState()
+    val isLoading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.searchConvenience(category = "exchange") }
+
     val context = LocalContext.current
-    val place = remember { DummyData.exchangePlaces.first() }
+    val place = remember(convenienceResult) {
+        if (convenienceResult?.category == "exchange") {
+            convenienceResult?.facilities?.firstOrNull()?.toPlace("환전소")
+        } else null
+    } ?: DummyData.exchangePlaces.first()
     val imageModels = remember(place.id) { place.galleryModels(defaultPlaceDetailGallery()) }
     val pagerState = rememberPagerState(pageCount = { imageModels.size })
     val rates = remember { DummyData.exchangeRates }

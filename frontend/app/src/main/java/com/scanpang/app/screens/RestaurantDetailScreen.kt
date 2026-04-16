@@ -30,7 +30,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,10 +46,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
 import com.scanpang.app.data.SavedPlaceNavTarget
 import com.scanpang.app.data.galleryModels
+import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.toRestaurantPlace
 import com.scanpang.app.navigation.AppRoutes
 import com.scanpang.app.ui.theme.ScanPangColors
 import com.scanpang.app.ui.theme.ScanPangDimens
@@ -61,8 +68,24 @@ import com.scanpang.app.ui.theme.ScanPangType
 fun RestaurantDetailScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
+    placeName: String = "",
+    placeAddress: String = "",
 ) {
-    val rp = remember { DummyData.halalRestaurants.first() }
+    val viewModel: ScanPangViewModel = viewModel()
+    val apiRestaurants by viewModel.restaurants.collectAsState()
+    val isLoading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.loadRestaurants() }
+
+    val rp = remember(apiRestaurants, placeName) {
+        val fromApi = apiRestaurants.map { it.toRestaurantPlace() }
+        if (placeName.isNotBlank()) {
+            fromApi.firstOrNull { it.place.name == placeName }
+                ?: DummyData.halalRestaurants.firstOrNull { it.place.name == placeName }
+        } else null
+    } ?: remember(apiRestaurants) {
+        apiRestaurants.firstOrNull()?.toRestaurantPlace()
+    } ?: DummyData.halalRestaurants.first()
     val place = rp.place
     val imageModels = remember(place.id) { place.galleryModels(defaultPlaceDetailGallery()) }
     val pagerState = rememberPagerState(pageCount = { imageModels.size })
@@ -133,7 +156,7 @@ fun RestaurantDetailScreen(
             ) {
                 Button(
                     onClick = {
-                        navController.navigate(AppRoutes.ArNavMap) { launchSingleTop = true }
+                        navController.navigate(AppRoutes.arNavMapRoute(place.name)) { launchSingleTop = true }
                     },
                     modifier = Modifier
                         .weight(1f)

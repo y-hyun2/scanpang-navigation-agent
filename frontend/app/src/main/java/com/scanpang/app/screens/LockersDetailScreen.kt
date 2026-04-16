@@ -19,11 +19,17 @@ import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
+import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.toPlace
 import com.scanpang.app.data.LockerTier
 import com.scanpang.app.data.Place
 import com.scanpang.app.data.SavedPlaceNavTarget
@@ -45,7 +51,17 @@ fun LockersDetailScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
 ) {
-    val place = remember { DummyData.lockerPlaces.first() }
+    val viewModel: ScanPangViewModel = viewModel()
+    val convenienceResult by viewModel.convenienceResult.collectAsState()
+    val isLoading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.searchConvenience(category = "locker") }
+
+    val place = remember(convenienceResult) {
+        if (convenienceResult?.category == "locker") {
+            convenienceResult?.facilities?.firstOrNull()?.toPlace("물품보관함")
+        } else null
+    } ?: DummyData.lockerPlaces.first()
     val tiers = remember(place.id) { DummyData.lockerTiers[place.id].orEmpty() }
     val bookmark = rememberDetailBookmark(
         placeId = place.id,

@@ -19,11 +19,17 @@ import androidx.compose.material.icons.rounded.LocalPharmacy
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
+import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.toPlace
 import com.scanpang.app.data.Place
 import com.scanpang.app.data.SavedPlaceNavTarget
 import com.scanpang.app.data.galleryModels
@@ -44,7 +50,17 @@ fun PharmacyDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val place = remember { DummyData.pharmacyPlaces.first() }
+    val viewModel: ScanPangViewModel = viewModel()
+    val convenienceResult by viewModel.convenienceResult.collectAsState()
+    val isLoading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.searchConvenience(category = "pharmacy") }
+
+    val place = remember(convenienceResult) {
+        if (convenienceResult?.category == "pharmacy") {
+            convenienceResult?.facilities?.firstOrNull()?.toPlace("약국")
+        } else null
+    } ?: DummyData.pharmacyPlaces.first()
     val imageModels = remember(place.id) { place.galleryModels(defaultPlaceDetailGallery()) }
     val pagerState = rememberPagerState(pageCount = { imageModels.size })
     val bookmark = rememberDetailBookmark(

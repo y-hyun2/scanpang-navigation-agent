@@ -24,15 +24,21 @@ import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
 import com.scanpang.app.data.Place
 import com.scanpang.app.data.SavedPlaceNavTarget
 import com.scanpang.app.data.galleryModels
+import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.toPlace
 import com.scanpang.app.navigation.AppRoutes
 import com.scanpang.app.ui.theme.ScanPangColors
 import com.scanpang.app.ui.theme.ScanPangDimens
@@ -43,8 +49,22 @@ import com.scanpang.app.ui.theme.ScanPangType
 fun PrayerRoomDetailScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
+    placeName: String = "",
 ) {
-    val place = remember { DummyData.prayerRooms.first() }
+    val viewModel: ScanPangViewModel = viewModel()
+    val apiPrayerRooms by viewModel.prayerRooms.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.loadPrayerRooms() }
+
+    val place = remember(apiPrayerRooms, placeName) {
+        val fromApi = apiPrayerRooms.map { it.toPlace() }
+        if (placeName.isNotBlank()) {
+            fromApi.firstOrNull { it.name == placeName }
+                ?: DummyData.prayerRooms.firstOrNull { it.name == placeName }
+        } else {
+            fromApi.firstOrNull()
+        }
+    } ?: DummyData.prayerRooms.first()
     val imageModels = remember(place.id) { place.galleryModels(defaultPlaceDetailGallery()) }
     val pagerState = rememberPagerState(pageCount = { imageModels.size })
     val bookmark = rememberDetailBookmark(
@@ -88,7 +108,7 @@ fun PrayerRoomDetailScreen(
             )
             DetailNavigateAndSideIconRow(
                 onNavigate = {
-                    navController.navigate(AppRoutes.ArNavMap) { launchSingleTop = true }
+                    navController.navigate(AppRoutes.arNavMapRoute(place.name)) { launchSingleTop = true }
                 },
                 sideIcon = Icons.Rounded.Mosque,
                 sideContentDescription = "키블라 방향",

@@ -18,13 +18,18 @@ import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
+import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.toPlace
 import com.scanpang.app.data.SavedPlaceNavTarget
 import com.scanpang.app.data.galleryModels
 import com.scanpang.app.navigation.AppRoutes
@@ -37,7 +42,17 @@ fun TouristSpotDetailScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
 ) {
-    val place = remember { DummyData.touristPlaces.first() }
+    val viewModel: ScanPangViewModel = viewModel()
+    val convenienceResult by viewModel.convenienceResult.collectAsState()
+    val isLoading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.searchConvenience(category = "tourist_info") }
+
+    val place = remember(convenienceResult) {
+        if (convenienceResult?.category == "tourist_info") {
+            convenienceResult?.facilities?.firstOrNull()?.toPlace("관광지")
+        } else null
+    } ?: DummyData.touristPlaces.first()
     val imageModels = remember(place.id) { place.galleryModels(defaultPlaceDetailGallery()) }
     val pagerState = rememberPagerState(pageCount = { imageModels.size })
     var fullscreenOpen by remember { mutableStateOf(false) }

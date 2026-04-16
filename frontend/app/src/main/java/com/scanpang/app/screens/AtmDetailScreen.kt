@@ -17,10 +17,16 @@ import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
+import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.toPlace
 import com.scanpang.app.data.Place
 import com.scanpang.app.data.SavedPlaceNavTarget
 import com.scanpang.app.navigation.AppRoutes
@@ -41,7 +47,17 @@ fun AtmDetailScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
 ) {
-    val place = remember { DummyData.atmPlaces.first() }
+    val viewModel: ScanPangViewModel = viewModel()
+    val convenienceResult by viewModel.convenienceResult.collectAsState()
+    val isLoading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.searchConvenience(category = "atm") }
+
+    val place = remember(convenienceResult) {
+        if (convenienceResult?.category == "atm") {
+            convenienceResult?.facilities?.firstOrNull()?.toPlace("ATM")
+        } else null
+    } ?: DummyData.atmPlaces.first()
     val bookmark = rememberDetailBookmark(
         placeId = place.id,
         placeName = place.name,

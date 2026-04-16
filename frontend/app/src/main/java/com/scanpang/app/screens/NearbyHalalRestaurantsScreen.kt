@@ -26,7 +26,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -35,12 +39,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.scanpang.app.components.SearchResultBadgeKind
 import com.scanpang.app.components.SearchResultPlaceCard
 import com.scanpang.app.components.SearchResultTrustTag
 import com.scanpang.app.data.DummyData
 import com.scanpang.app.data.RestaurantPlace
+import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.toRestaurantPlace
 import com.scanpang.app.navigation.AppRoutes
 import com.scanpang.app.ui.theme.ScanPangColors
 import com.scanpang.app.ui.theme.ScanPangDimens
@@ -105,10 +112,17 @@ fun NearbyHalalRestaurantsScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
 ) {
+    val viewModel: ScanPangViewModel = viewModel()
+    val apiRestaurants by viewModel.restaurants.collectAsState()
+    val isLoading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.loadRestaurants() }
+
     var filterIndex by remember { mutableIntStateOf(0) }
 
-    val allPlaces = remember {
-        DummyData.halalRestaurants.map { it.toNearbyHalalPlace() }
+    val allPlaces = remember(apiRestaurants) {
+        val fromApi = apiRestaurants.map { it.toRestaurantPlace().toNearbyHalalPlace() }
+        fromApi.ifEmpty { DummyData.halalRestaurants.map { it.toNearbyHalalPlace() } }
     }
 
     val visiblePlaces = remember(filterIndex, allPlaces) {
@@ -214,6 +228,13 @@ fun NearbyHalalRestaurantsScreen(
                     }
                 }
             }
+            if (isLoading && allPlaces.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = ScanPangColors.Primary)
+                    }
+                }
+            }
             items(
                 items = visiblePlaces,
                 key = { it.title + it.distance + it.badgeLabel },
@@ -227,7 +248,9 @@ fun NearbyHalalRestaurantsScreen(
                     isOpen = place.isOpen,
                     trustTags = place.trustTags,
                     onClick = {
-                        navController.navigate(AppRoutes.RestaurantDetail) { launchSingleTop = true }
+                        navController.navigate(
+                            AppRoutes.restaurantDetailRoute(place.title)
+                        ) { launchSingleTop = true }
                     },
                 )
             }

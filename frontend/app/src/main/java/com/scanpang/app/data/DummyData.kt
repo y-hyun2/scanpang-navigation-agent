@@ -1,6 +1,10 @@
 package com.scanpang.app.data
 
 import com.scanpang.app.R
+import com.scanpang.app.data.remote.Facility
+import com.scanpang.app.data.remote.HalalRestaurant
+import com.scanpang.app.data.remote.NavCandidate
+import com.scanpang.app.data.remote.PrayerRoomDetail
 
 data class Place(
     val id: String,
@@ -509,3 +513,74 @@ object DummyData {
         )
     }
 }
+
+// ── API → UI Model Converters ──
+
+fun HalalRestaurant.toRestaurantPlace(): RestaurantPlace = RestaurantPlace(
+    place = Place(
+        id = restaurant_id.ifBlank { name_ko },
+        name = name_ko,
+        category = "식당",
+        subCategory = cuisine_type.joinToString(", "),
+        distance = if (distance_m > 0) "${distance_m.toInt()}m" else "",
+        address = address,
+        phone = phone,
+        openHours = opening_hours,
+        isOpen = true,
+        description = "${name_ko} - ${cuisine_type.joinToString(", ")} 할랄 식당",
+        tags = buildList {
+            if (halal_type.isNotBlank()) add("할랄 인증")
+            if (muslim_cooks_available == true) add("무슬림 조리사")
+            if (no_alcohol_sales == true) add("주류 미판매")
+        },
+        latitude = lat,
+        longitude = lng,
+    ),
+    halalCategory = halal_type,
+    menuItems = menu_examples.map { MenuItem(it, "") },
+    lastOrder = last_order,
+    isMoslemChef = muslim_cooks_available == true,
+    noAlcohol = no_alcohol_sales == true,
+)
+
+fun PrayerRoomDetail.toPlace(): Place = Place(
+    id = name,
+    name = name,
+    category = "기도실",
+    distance = if (distance_m > 0) "${distance_m.toInt()}m" else "",
+    address = address,
+    openHours = open_hours,
+    isOpen = availability_status != "unavailable",
+    description = buildString {
+        append(name)
+        if (floor.isNotBlank()) append(" ($floor)")
+    },
+    tags = facilities.keys.toList().ifEmpty { listOf("기도실") },
+    latitude = lat,
+    longitude = lng,
+)
+
+fun Facility.toPlace(categoryLabel: String): Place = Place(
+    id = name,
+    name = name,
+    category = categoryLabel,
+    distance = if (distance_m > 0) "${distance_m.toInt()}m" else "",
+    address = address,
+    phone = phone,
+    openHours = open_hours,
+    isOpen = true,
+    description = extra.entries.joinToString(", ") { "${it.key}: ${it.value}" }.ifBlank { name },
+    tags = extra.keys.toList(),
+    latitude = lat,
+    longitude = lng,
+)
+
+fun NavCandidate.toPlace(): Place = Place(
+    id = poi_id,
+    name = name,
+    category = "",
+    distance = "",
+    address = address,
+    latitude = pns_lat,
+    longitude = pns_lon,
+)
