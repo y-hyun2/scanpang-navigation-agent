@@ -27,15 +27,12 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Mosque
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -45,9 +42,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.DummyData
+import com.scanpang.app.data.Place
 import com.scanpang.app.navigation.AppRoutes
 import com.scanpang.app.ui.theme.ScanPangColors
 import com.scanpang.app.ui.theme.ScanPangDimens
@@ -55,27 +52,33 @@ import com.scanpang.app.ui.theme.ScanPangShapes
 import com.scanpang.app.ui.theme.ScanPangSpacing
 import com.scanpang.app.ui.theme.ScanPangType
 
+private fun parseDistanceMetersForSort(line: String): Int {
+    Regex("""(\d+(?:\.\d+)?)\s*km""").find(line)?.groupValues?.get(1)?.toDoubleOrNull()
+        ?.let { return (it * 1000).toInt() }
+    Regex("""(\d+)\s*m""").find(line)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+    return Int.MAX_VALUE / 4
+}
+
+private fun prayerRoomsForFilter(filterIndex: Int): List<Place> {
+    val all = DummyData.prayerRooms
+    return when (filterIndex) {
+        1 -> all.sortedBy { parseDistanceMetersForSort(it.distance) }
+        2 -> all.filter { room -> room.tags.any { it.contains("남녀") } }
+        else -> all
+    }
+}
+
+/**
+ * Figma: 주변 기도실 (`197:2256`)
+ */
 @Composable
 fun NearbyPrayerRoomsScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
-    viewModel: ScanPangViewModel = viewModel(),
 ) {
     var filterIndex by remember { mutableIntStateOf(0) }
     val filterLabels = listOf("전체", "거리순", "남녀 분리")
-    val prayerRooms by viewModel.prayerRooms.collectAsState()
-    val loading by viewModel.loading.collectAsState()
-
-    LaunchedEffect(Unit) {
-        viewModel.loadPrayerRooms()
-    }
-
-    val visibleRooms = when (filterIndex) {
-        1 -> prayerRooms.sortedBy { it.distance_m }
-        2 -> prayerRooms.filter { it.facilities["gender_separation"] == true }
-        else -> prayerRooms
-    }
-
+    val prayerPlaces = remember(filterIndex) { prayerRoomsForFilter(filterIndex) }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = ScanPangColors.Surface,
@@ -214,27 +217,13 @@ fun NearbyPrayerRoomsScreen(
                     }
                 }
             }
-            if (loading) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = ScanPangColors.Primary)
-                    }
-                }
-            }
             items(
-                items = visibleRooms,
-                key = { it.name },
-            ) { room ->
-                val subtitle = buildString {
-                    if (room.distance_m > 0) append("${room.distance_m}m")
-                    if (room.floor.isNotEmpty()) {
-                        if (isNotEmpty()) append(" · ")
-                        append(room.floor)
-                    }
-                }
+                items = prayerPlaces,
+                key = { it.id },
+            ) { place ->
                 PrayerRoomRowCard(
-                    title = room.name,
-                    subtitle = subtitle.ifEmpty { room.address },
+                    title = place.name,
+                    subtitle = "${place.distance} · ${place.address}",
                     onClick = {
                         navController.navigate(AppRoutes.PrayerRoomDetail) { launchSingleTop = true }
                     },

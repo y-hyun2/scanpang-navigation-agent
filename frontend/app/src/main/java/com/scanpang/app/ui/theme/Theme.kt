@@ -124,6 +124,14 @@ object ScanPangColors {
     /** 방문 가능 카드 배경·테두리 */
     val DetailVisitOpenSurface = Color(0x0810B981)
     val DetailVisitOpenBorder = Color(0x2110B981)
+    /** 방문 제한·혼잡 등 부정 톤 카드 (Error 기반 알파) */
+    val DetailVisitClosedSurface = Color(0x08EA4335)
+    val DetailVisitClosedBorder = Color(0x21EA4335)
+    /** 방문 정보 중립 톤 카드 */
+    val DetailVisitNeutralSurface = Color(0x081A73E8)
+    val DetailVisitNeutralBorder = Color(0x211A73E8)
+    /** 시설 태그 칩 배경 */
+    val DetailFacilityTagBackground = Color(0xFFF3F4F6)
     /** 오버레이 카운트 배지 */
     val DetailImageCountScrim = Color(0x4D000000)
 }
@@ -313,6 +321,8 @@ object ScanPangDimens {
     val detailCtaSide: Dp = 48.dp
     val detailSectionSpacing: Dp = 20.dp
     val detailContentBottomPad: Dp = 24.dp
+    /** 방문 가능 여부 등 가로 슬라이드 카드 높이 */
+    val detailVisitPagerCardMinHeight: Dp = 100.dp
     val detailListCardRadius: Dp = 14.dp
     val detailArStorePanelHeight: Dp = 420.dp
     val detailArStoreHeroHeight: Dp = 168.dp

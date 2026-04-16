@@ -4,57 +4,70 @@ package com.scanpang.app.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccessTime
-import androidx.compose.material.icons.rounded.Mosque
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
-import com.scanpang.app.data.Place
 import com.scanpang.app.data.SavedPlaceNavTarget
 import com.scanpang.app.data.galleryModels
 import com.scanpang.app.navigation.AppRoutes
 import com.scanpang.app.ui.theme.ScanPangColors
 import com.scanpang.app.ui.theme.ScanPangDimens
 import com.scanpang.app.ui.theme.ScanPangSpacing
-import com.scanpang.app.ui.theme.ScanPangType
 
 @Composable
-fun PrayerRoomDetailScreen(
+fun TouristSpotDetailScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
 ) {
-    val place = remember { DummyData.prayerRooms.first() }
+    val place = remember { DummyData.touristPlaces.first() }
     val imageModels = remember(place.id) { place.galleryModels(defaultPlaceDetailGallery()) }
     val pagerState = rememberPagerState(pageCount = { imageModels.size })
+    var fullscreenOpen by remember { mutableStateOf(false) }
+    val visitCards = remember(place.id) {
+        listOf(
+            DetailVisitCardUi(
+                if (place.isOpen) "지금 방문 가능" else "운영 종료",
+                place.openHours,
+                if (place.isOpen) DetailVisitCardTone.Open else DetailVisitCardTone.Closed,
+            ),
+            DetailVisitCardUi("야간 전망", "일몰 이후 조명·야경 코스", DetailVisitCardTone.Neutral),
+            DetailVisitCardUi("우천 시", "실내 전망 위주 동선 추천", DetailVisitCardTone.Neutral),
+        )
+    }
     val bookmark = rememberDetailBookmark(
         placeId = place.id,
         placeName = place.name,
         category = place.category,
         distanceLine = "${place.category} · ${place.distance}",
         tags = place.tags,
-        target = SavedPlaceNavTarget.PrayerRoom,
+        target = SavedPlaceNavTarget.TouristSpot,
     )
+
+    if (fullscreenOpen) {
+        DetailImageFullscreenDialog(
+            gallery = imageModels,
+            pagerState = pagerState,
+            onDismiss = { fullscreenOpen = false },
+        )
+    }
 
     Column(
         modifier = modifier
@@ -67,7 +80,7 @@ fun PrayerRoomDetailScreen(
             gallery = imageModels,
             pagerState = pagerState,
             onBack = { navController.popBackStack() },
-            onFullscreenClick = null,
+            onFullscreenClick = { fullscreenOpen = true },
         )
         Column(
             modifier = Modifier.padding(horizontal = ScanPangDimens.screenHorizontal),
@@ -82,56 +95,22 @@ fun PrayerRoomDetailScreen(
             DetailCategoryTagDistanceRow(
                 categoryLabel = place.category,
                 distanceText = place.distance,
-                trailing = {
-                    AvailabilityDotRow(place = place)
-                },
             )
-            DetailNavigateAndSideIconRow(
-                onNavigate = {
+            DetailNavigateWideButton(
+                onClick = {
                     navController.navigate(AppRoutes.ArNavMap) { launchSingleTop = true }
                 },
-                sideIcon = Icons.Rounded.Mosque,
-                sideContentDescription = "키블라 방향",
-                onSideClick = {
-                    navController.navigate(AppRoutes.Qibla) { launchSingleTop = true }
-                },
             )
-            DetailVisitCardsHorizontalPager(cards = place.detailVisitCardsFromPlace())
-            DetailScreenDivider()
-            DetailSectionHeader(title = "편의시설")
-            DetailFacilityTagRow(tags = place.tags)
+            DetailVisitCardsHorizontalPager(cards = visitCards)
             DetailScreenDivider()
             DetailSectionHeader(title = "소개")
             DetailIntroBody(text = place.description)
             DetailSectionHeader(title = "상세 정보")
             DetailInfoLine(Icons.Rounded.Place, "주소", place.address)
             DetailInfoLine(Icons.Rounded.AccessTime, "운영시간", place.openHours)
-            if (place.phone.isNotBlank()) {
-                DetailInfoLine(Icons.Rounded.Phone, "전화번호", place.phone)
-            }
+            DetailInfoLine(Icons.Rounded.AccessTime, "입장료", place.subCategory.ifBlank { "현장 요금제" })
+            DetailInfoLine(Icons.Rounded.Phone, "전화번호", place.phone)
             DetailContentBottomSpacer()
         }
-    }
-}
-
-@Composable
-private fun AvailabilityDotRow(place: Place) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(ScanPangSpacing.xs),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(ScanPangDimens.icon10)
-                .clip(CircleShape)
-                .background(
-                    if (place.isOpen) ScanPangColors.StatusOpen else ScanPangColors.Error,
-                ),
-        )
-        Text(
-            text = if (place.isOpen) "이용 가능" else "이용 제한",
-            style = ScanPangType.caption12Medium,
-            color = ScanPangColors.OnSurfaceStrong,
-        )
     }
 }

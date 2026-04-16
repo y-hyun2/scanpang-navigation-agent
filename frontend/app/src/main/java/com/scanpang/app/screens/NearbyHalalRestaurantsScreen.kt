@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,19 +19,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.NoDrinks
-import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Verified
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -41,12 +35,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.scanpang.app.components.SearchResultBadgeKind
 import com.scanpang.app.components.SearchResultPlaceCard
 import com.scanpang.app.components.SearchResultTrustTag
-import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.DummyData
+import com.scanpang.app.data.RestaurantPlace
 import com.scanpang.app.navigation.AppRoutes
 import com.scanpang.app.ui.theme.ScanPangColors
 import com.scanpang.app.ui.theme.ScanPangDimens
@@ -62,23 +56,68 @@ private val filterLabels = listOf(
     "SALAM SEOUL",
 )
 
+private data class NearbyHalalPlace(
+    val title: String,
+    val categoryFilter: String,
+    val badgeKind: SearchResultBadgeKind,
+    val badgeLabel: String,
+    val cuisineLabel: String,
+    val distance: String,
+    val isOpen: Boolean,
+    val trustTags: List<SearchResultTrustTag>,
+)
+
+private fun RestaurantPlace.toNearbyHalalPlace(): NearbyHalalPlace {
+    val place = this.place
+    val badgeKind = when (halalCategory) {
+        "HALAL MEAT" -> SearchResultBadgeKind.HalalMeat
+        "SEAFOOD" -> SearchResultBadgeKind.Seafood
+        "VEGGIE" -> SearchResultBadgeKind.Veggie
+        "SALAM SEOUL" -> SearchResultBadgeKind.SalamSeoul
+        else -> SearchResultBadgeKind.HalalMeat
+    }
+    val trustTags = place.tags.map { tag ->
+        val icon = when {
+            tag.contains("인증") || tag.contains("살람") -> Icons.Rounded.Verified
+            tag.contains("추천") -> Icons.Rounded.Star
+            else -> Icons.Rounded.Verified
+        }
+        SearchResultTrustTag(tag, icon)
+    }
+    val cuisineLabel = place.subCategory.ifBlank { "한식" }
+    return NearbyHalalPlace(
+        title = place.name,
+        categoryFilter = halalCategory,
+        badgeKind = badgeKind,
+        badgeLabel = halalCategory,
+        cuisineLabel = cuisineLabel,
+        distance = place.distance,
+        isOpen = place.isOpen,
+        trustTags = trustTags,
+    )
+}
+
+/**
+ * Figma: 주변 할랄 식당 (`290:2034`)
+ */
 @Composable
 fun NearbyHalalRestaurantsScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
-    viewModel: ScanPangViewModel = viewModel(),
 ) {
     var filterIndex by remember { mutableIntStateOf(0) }
-    val restaurants by viewModel.restaurants.collectAsState()
-    val loading by viewModel.loading.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.loadRestaurants()
+    val allPlaces = remember {
+        DummyData.halalRestaurants.map { it.toNearbyHalalPlace() }
     }
 
-    val halalTypeFilter = if (filterIndex == 0) "" else filterLabels[filterIndex]
-    val visiblePlaces = if (halalTypeFilter.isEmpty()) restaurants
-    else restaurants.filter { it.halal_type.equals(halalTypeFilter, ignoreCase = true) }
+    val visiblePlaces = remember(filterIndex, allPlaces) {
+        if (filterIndex == 0) allPlaces
+        else {
+            val key = filterLabels[filterIndex]
+            allPlaces.filter { it.categoryFilter == key }
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -175,40 +214,20 @@ fun NearbyHalalRestaurantsScreen(
                     }
                 }
             }
-            if (loading) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = ScanPangColors.Primary)
-                    }
-                }
-            }
             items(
                 items = visiblePlaces,
-                key = { it.restaurant_id.ifEmpty { it.name_ko } },
-            ) { restaurant ->
-                val badgeKind = when (restaurant.halal_type.uppercase()) {
-                    "HALAL MEAT", "HALAL_MEAT" -> SearchResultBadgeKind.HalalMeat
-                    "SEAFOOD" -> SearchResultBadgeKind.Seafood
-                    "VEGGIE" -> SearchResultBadgeKind.Veggie
-                    "SALAM SEOUL", "SALAM_SEOUL" -> SearchResultBadgeKind.SalamSeoul
-                    else -> SearchResultBadgeKind.HalalMeat
-                }
+                key = { it.title + it.distance + it.badgeLabel },
+            ) { place ->
                 SearchResultPlaceCard(
-                    title = restaurant.name_ko,
-                    badgeKind = badgeKind,
-                    badgeLabel = restaurant.halal_type.uppercase(),
-                    cuisineLabel = restaurant.cuisine_type.joinToString(" · ").ifEmpty { restaurant.halal_type },
-                    distance = "${restaurant.distance_m.toInt()}m",
-                    isOpen = true,
-                    trustTags = buildList {
-                        add(SearchResultTrustTag("할랄 인증", Icons.Rounded.Verified))
-                        if (restaurant.muslim_cooks_available == true) add(SearchResultTrustTag("무슬림 조리사", Icons.Rounded.Restaurant))
-                        if (restaurant.no_alcohol_sales == true) add(SearchResultTrustTag("주류 미판매", Icons.Rounded.NoDrinks))
-                    },
+                    title = place.title,
+                    badgeKind = place.badgeKind,
+                    badgeLabel = place.badgeLabel,
+                    cuisineLabel = place.cuisineLabel,
+                    distance = place.distance,
+                    isOpen = place.isOpen,
+                    trustTags = place.trustTags,
                     onClick = {
-                        navController.navigate(
-                            AppRoutes.restaurantDetailRoute(restaurant.name_ko, restaurant.address)
-                        ) { launchSingleTop = true }
+                        navController.navigate(AppRoutes.RestaurantDetail) { launchSingleTop = true }
                     },
                 )
             }

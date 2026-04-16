@@ -17,6 +17,18 @@ data class SavedPlaceEntry(
 enum class SavedPlaceNavTarget {
     Restaurant,
     PrayerRoom,
+    TouristSpot,
+    Shopping,
+    ConvenienceStore,
+    Cafe,
+    Atm,
+    Bank,
+    Exchange,
+    Subway,
+    Restroom,
+    Lockers,
+    Hospital,
+    Pharmacy,
 }
 
 class SavedPlacesStore(context: Context) {
@@ -37,7 +49,7 @@ class SavedPlacesStore(context: Context) {
                             category = o.getString("category"),
                             distanceLine = o.optString("distanceLine", o.optString("distance", "")),
                             tags = o.optJSONArray("tags")?.toStringList().orEmpty(),
-                            target = SavedPlaceNavTarget.valueOf(
+                            target = parseSavedPlaceNavTarget(
                                 o.optString("target", SavedPlaceNavTarget.Restaurant.name),
                             ),
                             savedOrder = o.optLong("savedOrder", 0L),
@@ -91,3 +103,7 @@ class SavedPlacesStore(context: Context) {
         private const val KEY_PLACES = "places_json"
     }
 }
+
+internal fun parseSavedPlaceNavTarget(raw: String): SavedPlaceNavTarget =
+    SavedPlaceNavTarget.entries.firstOrNull { it.name == raw }
+        ?: SavedPlaceNavTarget.Restaurant

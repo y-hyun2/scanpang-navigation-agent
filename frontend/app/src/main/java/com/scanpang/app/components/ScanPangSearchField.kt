@@ -60,9 +60,13 @@ fun ScanPangSearchFieldPlaceholder(
 @Composable
 fun ScanPangSearchFieldFilled(
     query: String,
+    onSearchBarClick: () -> Unit,
     onClearClick: () -> Unit,
     modifier: Modifier = Modifier,
+    hintWhenBlank: String? = null,
 ) {
+    val showHint = query.isBlank() && !hintWhenBlank.isNullOrBlank()
+    val labelText = if (showHint) hintWhenBlank else query
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -74,6 +78,9 @@ fun ScanPangSearchFieldFilled(
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onSearchBarClick),
             horizontalArrangement = Arrangement.spacedBy(ScanPangSpacing.rowGap10),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -81,23 +88,25 @@ fun ScanPangSearchFieldFilled(
                 imageVector = Icons.Rounded.Search,
                 contentDescription = null,
                 modifier = Modifier.size(ScanPangDimens.icon18),
-                tint = ScanPangColors.Primary,
+                tint = if (showHint) ScanPangColors.OnSurfacePlaceholder else ScanPangColors.Primary,
             )
             Text(
-                text = query,
-                style = ScanPangType.body15Medium,
-                color = ScanPangColors.OnSurfaceStrong,
+                text = labelText,
+                style = if (showHint) ScanPangType.searchPlaceholderRegular else ScanPangType.body15Medium,
+                color = if (showHint) ScanPangColors.OnSurfacePlaceholder else ScanPangColors.OnSurfaceStrong,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Icon(
-            imageVector = Icons.Rounded.Close,
-            contentDescription = "지우기",
-            modifier = Modifier
-                .size(ScanPangDimens.icon18)
-                .clickable(onClick = onClearClick),
-            tint = ScanPangColors.OnSurfacePlaceholder,
-        )
+        if (!showHint && query.isNotEmpty()) {
+            Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = "지우기",
+                modifier = Modifier
+                    .size(ScanPangDimens.icon18)
+                    .clickable(onClick = onClearClick),
+                tint = ScanPangColors.OnSurfacePlaceholder,
+            )
+        }
     }
 }

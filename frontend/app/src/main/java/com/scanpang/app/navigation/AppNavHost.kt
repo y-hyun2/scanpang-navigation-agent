@@ -17,11 +17,23 @@ import com.scanpang.app.screens.onboarding.OnboardingNameScreen
 import com.scanpang.app.screens.onboarding.OnboardingPreferenceScreen
 import com.scanpang.app.screens.NearbyHalalRestaurantsScreen
 import com.scanpang.app.screens.NearbyPrayerRoomsScreen
+import com.scanpang.app.screens.AtmDetailScreen
+import com.scanpang.app.screens.BankDetailScreen
+import com.scanpang.app.screens.CafeDetailScreen
+import com.scanpang.app.screens.ConvenienceStoreDetailScreen
+import com.scanpang.app.screens.ExchangeDetailScreen
+import com.scanpang.app.screens.HospitalDetailScreen
+import com.scanpang.app.screens.LockersDetailScreen
+import com.scanpang.app.screens.PharmacyDetailScreen
 import com.scanpang.app.screens.PrayerRoomDetailScreen
 import com.scanpang.app.screens.ProfileScreen
 import com.scanpang.app.screens.QiblaDirectionScreen
 import com.scanpang.app.screens.RestaurantDetailScreen
+import com.scanpang.app.screens.RestroomDetailScreen
 import com.scanpang.app.screens.SavedPlacesScreen
+import com.scanpang.app.screens.ShoppingDetailScreen
+import com.scanpang.app.screens.SubwayDetailScreen
+import com.scanpang.app.screens.TouristSpotDetailScreen
 import com.scanpang.app.screens.SearchDefaultScreen
 import com.scanpang.app.screens.SearchResultsScreen
 import com.scanpang.app.screens.ar.ArExploreScreen
@@ -37,6 +49,8 @@ object AppRoutes {
     const val Qibla = "qibla"
     const val Search = "search"
     const val SearchResults = "search_results"
+
+    const val SearchSavedStateClearQueryKey = "clear_search_query"
 
     fun searchResultsRoute(query: String): String {
         val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
@@ -54,6 +68,18 @@ object AppRoutes {
         return "$RestaurantDetail/$encodedName/$encodedAddr"
     }
     const val PrayerRoomDetail = "prayer_room_detail"
+    const val TouristDetail = "tourist_detail"
+    const val ShoppingDetail = "shopping_detail"
+    const val ConvenienceDetail = "convenience_detail"
+    const val CafeDetail = "cafe_detail"
+    const val AtmDetail = "atm_detail"
+    const val BankDetail = "bank_detail"
+    const val ExchangeDetail = "exchange_detail"
+    const val SubwayDetail = "subway_detail"
+    const val RestroomDetail = "restroom_detail"
+    const val LockersDetail = "lockers_detail"
+    const val HospitalDetail = "hospital_detail"
+    const val PharmacyDetail = "pharmacy_detail"
     const val ArExplore = "ar_explore"
     const val ArNavMap = "ar_nav_map"
     fun arNavMapRoute(destName: String = ""): String {
@@ -73,60 +99,26 @@ fun AppNavHost(
         startDestination = startDestination,
         modifier = modifier,
     ) {
-        composable(AppRoutes.Splash) {
-            SplashScreen(navController = navController)
-        }
-        composable(AppRoutes.OnboardingLanguage) {
-            OnboardingLanguageScreen(navController = navController)
-        }
-        composable(AppRoutes.OnboardingName) {
-            OnboardingNameScreen(navController = navController)
-        }
-        composable(AppRoutes.OnboardingPreference) {
-            OnboardingPreferenceScreen(navController = navController)
-        }
-        composable(AppRoutes.Home) {
-            HomeScreen(navController = navController)
-        }
-        composable(AppRoutes.Qibla) {
-            QiblaDirectionScreen(navController = navController)
-        }
-        composable(AppRoutes.Search) {
-            SearchDefaultScreen(navController = navController)
-        }
+        composable(AppRoutes.Splash) { SplashScreen(navController = navController) }
+        composable(AppRoutes.OnboardingLanguage) { OnboardingLanguageScreen(navController = navController) }
+        composable(AppRoutes.OnboardingName) { OnboardingNameScreen(navController = navController) }
+        composable(AppRoutes.OnboardingPreference) { OnboardingPreferenceScreen(navController = navController) }
+        composable(AppRoutes.Home) { HomeScreen(navController = navController) }
+        composable(AppRoutes.Qibla) { QiblaDirectionScreen(navController = navController) }
+        composable(AppRoutes.Search) { SearchDefaultScreen(navController = navController) }
         composable(
             route = "${AppRoutes.SearchResults}/{query}",
-            arguments = listOf(
-                navArgument("query") {
-                    type = NavType.StringType
-                    defaultValue = ""
-                },
-            ),
+            arguments = listOf(navArgument("query") { type = NavType.StringType; defaultValue = "" }),
         ) { entry ->
             val raw = entry.arguments?.getString("query").orEmpty()
-            val query = runCatching {
-                URLDecoder.decode(raw, StandardCharsets.UTF_8.name())
-            }.getOrDefault(raw)
-            SearchResultsScreen(
-                navController = navController,
-                searchQuery = query,
-            )
+            val query = runCatching { URLDecoder.decode(raw, StandardCharsets.UTF_8.name()) }.getOrDefault(raw)
+            SearchResultsScreen(navController = navController, searchQuery = query)
         }
-        composable(AppRoutes.Saved) {
-            SavedPlacesScreen(navController = navController)
-        }
-        composable(AppRoutes.Profile) {
-            ProfileScreen(navController = navController)
-        }
-        composable(AppRoutes.NearbyHalal) {
-            NearbyHalalRestaurantsScreen(navController = navController)
-        }
-        composable(AppRoutes.NearbyPrayer) {
-            NearbyPrayerRoomsScreen(navController = navController)
-        }
-        composable(AppRoutes.RestaurantDetail) {
-            RestaurantDetailScreen(navController = navController, placeName = "", placeAddress = "")
-        }
+        composable(AppRoutes.Saved) { SavedPlacesScreen(navController = navController) }
+        composable(AppRoutes.Profile) { ProfileScreen(navController = navController) }
+        composable(AppRoutes.NearbyHalal) { NearbyHalalRestaurantsScreen(navController = navController) }
+        composable(AppRoutes.NearbyPrayer) { NearbyPrayerRoomsScreen(navController = navController) }
+        composable(AppRoutes.RestaurantDetail) { RestaurantDetailScreen(navController = navController) }
         composable(
             route = "${AppRoutes.RestaurantDetail}/{name}/{address}",
             arguments = listOf(
@@ -138,20 +130,24 @@ fun AppNavHost(
             val address = runCatching { URLDecoder.decode(entry.arguments?.getString("address").orEmpty(), StandardCharsets.UTF_8.name()) }.getOrDefault("")
             RestaurantDetailScreen(navController = navController, placeName = name, placeAddress = address)
         }
-        composable(AppRoutes.PrayerRoomDetail) {
-            PrayerRoomDetailScreen(navController = navController)
-        }
-        composable(AppRoutes.ArExplore) {
-            ArExploreScreen(navController = navController)
-        }
-        composable(AppRoutes.ArNavMap) {
-            ArNavigationMapScreen(navController = navController, destinationName = "")
-        }
+        composable(AppRoutes.PrayerRoomDetail) { PrayerRoomDetailScreen(navController = navController) }
+        composable(AppRoutes.TouristDetail) { TouristSpotDetailScreen(navController = navController) }
+        composable(AppRoutes.ShoppingDetail) { ShoppingDetailScreen(navController = navController) }
+        composable(AppRoutes.ConvenienceDetail) { ConvenienceStoreDetailScreen(navController = navController) }
+        composable(AppRoutes.CafeDetail) { CafeDetailScreen(navController = navController) }
+        composable(AppRoutes.AtmDetail) { AtmDetailScreen(navController = navController) }
+        composable(AppRoutes.BankDetail) { BankDetailScreen(navController = navController) }
+        composable(AppRoutes.ExchangeDetail) { ExchangeDetailScreen(navController = navController) }
+        composable(AppRoutes.SubwayDetail) { SubwayDetailScreen(navController = navController) }
+        composable(AppRoutes.RestroomDetail) { RestroomDetailScreen(navController = navController) }
+        composable(AppRoutes.LockersDetail) { LockersDetailScreen(navController = navController) }
+        composable(AppRoutes.HospitalDetail) { HospitalDetailScreen(navController = navController) }
+        composable(AppRoutes.PharmacyDetail) { PharmacyDetailScreen(navController = navController) }
+        composable(AppRoutes.ArExplore) { ArExploreScreen(navController = navController) }
+        composable(AppRoutes.ArNavMap) { ArNavigationMapScreen(navController = navController, destinationName = "") }
         composable(
             route = "${AppRoutes.ArNavMap}/{destName}",
-            arguments = listOf(
-                navArgument("destName") { type = NavType.StringType; defaultValue = "" },
-            ),
+            arguments = listOf(navArgument("destName") { type = NavType.StringType; defaultValue = "" }),
         ) { entry ->
             val destName = runCatching { URLDecoder.decode(entry.arguments?.getString("destName").orEmpty(), StandardCharsets.UTF_8.name()) }.getOrDefault("")
             ArNavigationMapScreen(navController = navController, destinationName = destName)

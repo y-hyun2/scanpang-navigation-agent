@@ -54,18 +54,13 @@ import com.scanpang.app.ui.theme.ScanPangSpacing
 import com.scanpang.app.ui.theme.ScanPangType
 
 private val filterLabels = listOf(
-    "전체", "식당", "카페", "편의점", "쇼핑", "환전소", "은행", "ATM",
+    "전체", "식당", "카페", "편의점", "쇼핑", "관광지", "기도실", "환전소", "은행", "ATM",
     "병원", "약국", "지하철역", "화장실", "물품보관함",
 )
 
 private enum class SavedSort {
     ByDistance,
     ByRecent,
-}
-
-private enum class SavedTarget {
-    Restaurant,
-    PrayerRoom,
 }
 
 private data class SavedPlaceRow(
@@ -75,7 +70,7 @@ private data class SavedPlaceRow(
     val tags: List<SavedPlaceTag>,
     val distanceMeters: Int,
     val savedOrder: Long,
-    val target: SavedTarget,
+    val navTarget: SavedPlaceNavTarget,
 )
 
 private fun tagLabelToStyle(label: String): SavedPlaceTagStyle = when {
@@ -91,20 +86,34 @@ private fun parseDistanceMeters(line: String): Int {
     return Int.MAX_VALUE / 4
 }
 
-private fun SavedPlaceEntry.toUiRow(): SavedPlaceRow {
-    val target = when (this.target) {
-        SavedPlaceNavTarget.Restaurant -> SavedTarget.Restaurant
-        SavedPlaceNavTarget.PrayerRoom -> SavedTarget.PrayerRoom
+private fun SavedPlaceEntry.toUiRow(): SavedPlaceRow = SavedPlaceRow(
+    title = name,
+    categoryLabel = category,
+    distanceLine = distanceLine,
+    tags = tags.map { SavedPlaceTag(it, tagLabelToStyle(it)) },
+    distanceMeters = parseDistanceMeters(distanceLine),
+    savedOrder = savedOrder,
+    navTarget = target,
+)
+
+private fun NavController.navigateToSavedDetail(target: SavedPlaceNavTarget) {
+    val route = when (target) {
+        SavedPlaceNavTarget.Restaurant -> AppRoutes.RestaurantDetail
+        SavedPlaceNavTarget.PrayerRoom -> AppRoutes.PrayerRoomDetail
+        SavedPlaceNavTarget.TouristSpot -> AppRoutes.TouristDetail
+        SavedPlaceNavTarget.Shopping -> AppRoutes.ShoppingDetail
+        SavedPlaceNavTarget.ConvenienceStore -> AppRoutes.ConvenienceDetail
+        SavedPlaceNavTarget.Cafe -> AppRoutes.CafeDetail
+        SavedPlaceNavTarget.Atm -> AppRoutes.AtmDetail
+        SavedPlaceNavTarget.Bank -> AppRoutes.BankDetail
+        SavedPlaceNavTarget.Exchange -> AppRoutes.ExchangeDetail
+        SavedPlaceNavTarget.Subway -> AppRoutes.SubwayDetail
+        SavedPlaceNavTarget.Restroom -> AppRoutes.RestroomDetail
+        SavedPlaceNavTarget.Lockers -> AppRoutes.LockersDetail
+        SavedPlaceNavTarget.Hospital -> AppRoutes.HospitalDetail
+        SavedPlaceNavTarget.Pharmacy -> AppRoutes.PharmacyDetail
     }
-    return SavedPlaceRow(
-        title = name,
-        categoryLabel = category,
-        distanceLine = distanceLine,
-        tags = tags.map { SavedPlaceTag(it, tagLabelToStyle(it)) },
-        distanceMeters = parseDistanceMeters(distanceLine),
-        savedOrder = savedOrder,
-        target = target,
-    )
+    navigate(route) { launchSingleTop = true }
 }
 
 @Composable
@@ -305,14 +314,7 @@ fun SavedPlacesScreen(
                         categoryLabel = row.categoryLabel,
                         distanceLine = row.distanceLine,
                         tags = row.tags,
-                        onClick = {
-                            when (row.target) {
-                                SavedTarget.Restaurant ->
-                                    navController.navigate(AppRoutes.RestaurantDetail) { launchSingleTop = true }
-                                SavedTarget.PrayerRoom ->
-                                    navController.navigate(AppRoutes.PrayerRoomDetail) { launchSingleTop = true }
-                            }
-                        },
+                        onClick = { navController.navigateToSavedDetail(row.navTarget) },
                     )
                 }
             }

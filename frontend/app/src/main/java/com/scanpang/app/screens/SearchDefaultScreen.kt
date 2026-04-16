@@ -23,13 +23,16 @@ import androidx.compose.material.icons.rounded.Medication
 import androidx.compose.material.icons.rounded.Mosque
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +72,17 @@ fun SearchDefaultScreen(
     val historyPrefs = remember { SearchHistoryPreferences(context) }
     var recent by remember { mutableStateOf(historyPrefs.getRecent()) }
     var query by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        val entry = runCatching { navController.getBackStackEntry(AppRoutes.Search) }.getOrNull()
+            ?: return@LaunchedEffect
+        entry.savedStateHandle.getStateFlow(AppRoutes.SearchSavedStateClearQueryKey, false).collect { shouldClear ->
+            if (shouldClear) {
+                query = ""
+                entry.savedStateHandle[AppRoutes.SearchSavedStateClearQueryKey] = false
+            }
+        }
+    }
 
     fun runSearch(raw: String) {
         val q = raw.trim()
@@ -117,6 +131,20 @@ fun SearchDefaultScreen(
                         modifier = Modifier.size(ScanPangDimens.icon18),
                         tint = ScanPangColors.OnSurfacePlaceholder,
                     )
+                },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(
+                            onClick = { query = "" },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "검색어 지우기",
+                                modifier = Modifier.size(ScanPangDimens.icon18),
+                                tint = ScanPangColors.OnSurfacePlaceholder,
+                            )
+                        }
+                    }
                 },
                 textStyle = ScanPangType.body15Medium.copy(
                     color = ScanPangColors.OnSurfaceStrong,

@@ -33,6 +33,8 @@ enum class SearchResultBadgeKind {
     Seafood,
     Veggie,
     SalamSeoul,
+    /** 식당 외 장소(카페·기도실·쇼핑 등) */
+    General,
 }
 
 data class SearchResultTrustTag(
@@ -143,12 +145,14 @@ private fun ResultBadge(
         SearchResultBadgeKind.Seafood -> ScanPangColors.SeafoodBadgeBackground
         SearchResultBadgeKind.Veggie -> ScanPangColors.VeggieBadgeBackground
         SearchResultBadgeKind.SalamSeoul -> ScanPangColors.SalamSeoulBadgeBackground
+        SearchResultBadgeKind.General -> ScanPangColors.DetailFacilityTagBackground
     }
     val fg = when (badgeKind) {
         SearchResultBadgeKind.HalalMeat -> ScanPangColors.HalalMeatBadgeText
         SearchResultBadgeKind.Seafood -> ScanPangColors.Primary
         SearchResultBadgeKind.Veggie -> ScanPangColors.VeggieBadgeText
         SearchResultBadgeKind.SalamSeoul -> ScanPangColors.SalamSeoulBadgeText
+        SearchResultBadgeKind.General -> ScanPangColors.OnSurfaceStrong
     }
     Row(
         modifier = Modifier
