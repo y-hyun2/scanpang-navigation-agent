@@ -47,7 +47,6 @@ class ArNavigationActivity : AppCompatActivity() {
     private lateinit var binding: ActivityArNavigationBinding
     private lateinit var viewModel: MainViewModel
     private lateinit var statusTextView: TextView
-    private lateinit var telemetryTextView: TextView
 
     private var targetDestination: String = ""
     private var fullRouteNodes: List<ArRouteNode> = emptyList()
@@ -75,7 +74,6 @@ class ArNavigationActivity : AppCompatActivity() {
     private var currentDotAngle = 0f
     private var targetDotAngle = 0f
     private var dotAnimator: android.animation.ValueAnimator? = null
-    private var lastTelemetryUpdateTime = 0L
 
     private val frameCallback = com.hufs.arnavigation_com.util.ArFrameCallback(
         Runnable { updateGeospatialAndChunk() }
@@ -140,9 +138,7 @@ class ArNavigationActivity : AppCompatActivity() {
 
     private fun setupOverlayUI() {
         statusTextView = TextView(this).apply { setTextColor(Color.WHITE); textSize = 18f; setBackgroundColor(Color.parseColor("#80000000")); setPadding(32, 32, 32, 32); gravity = Gravity.CENTER }
-        telemetryTextView = TextView(this).apply { setTextColor(Color.GREEN); textSize = 14f; setBackgroundColor(Color.parseColor("#99000000")); setPadding(16, 16, 16, 16) }
         binding.uiContainer.addView(statusTextView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.BOTTOM; setMargins(0, 0, 0, 100) })
-        binding.uiContainer.addView(telemetryTextView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.START or Gravity.TOP; setMargins(32, 500, 0, 0) })
         (supportFragmentManager.findFragmentById(R.id.miniMap) as com.google.android.gms.maps.SupportMapFragment).getMapAsync { map ->
             googleMap = map; mapInitialized = true
             googleMap.uiSettings.apply { isZoomControlsEnabled = true; isZoomGesturesEnabled = true; isScrollGesturesEnabled = true; isRotateGesturesEnabled = true }
@@ -232,7 +228,7 @@ class ArNavigationActivity : AppCompatActivity() {
         }
         if (parsedNodes.isNotEmpty()) { parsedNodes[0] = parsedNodes[0].copy(type = NodeType.START); parsedNodes[parsedNodes.size - 1] = parsedNodes[parsedNodes.size - 1].copy(type = NodeType.END) }
         parsedNodes.forEachIndexed { index, node -> if (node.type == NodeType.TURN_POINT) {
-            val direction = when (node.turnType) { 13, 19 -> "우회전"; 12, 16 -> "좌회전"; 17 -> "좌측"; 18 -> "우측"
+            val direction = when (node.turnType) { 13, 19 -> "우회전"; 12, 16 -> "좌회전"; 17 -> "좌측 경로"; 18 -> "우측 경로"
                 else -> { if (index > 0 && index < parsedNodes.size - 1) { val d = FloatArray(1)
                     var pi = index - 1; while (pi > 0) { val c = parsedNodes[pi]; if (c.type == NodeType.TURN_POINT) break; Location.distanceBetween(c.lat, c.lng, node.lat, node.lng, d); if (d[0] >= 10f) break; pi-- }
                     var ni = index + 1; while (ni < parsedNodes.size - 1) { val c = parsedNodes[ni]; if (c.type == NodeType.TURN_POINT) break; Location.distanceBetween(node.lat, node.lng, c.lat, c.lng, d); if (d[0] >= 10f) break; ni++ }
@@ -248,10 +244,6 @@ class ArNavigationActivity : AppCompatActivity() {
     private fun updateGeospatialAndChunk() {
         val earth = sceneView.session?.earth ?: return; if (earth.trackingState != TrackingState.TRACKING) return
         val pose = earth.cameraGeospatialPose; val lat = pose.latitude; val lng = pose.longitude; val now = System.currentTimeMillis()
-        if (now - lastTelemetryUpdateTime > 500) { lastTelemetryUpdateTime = now; runOnUiThread {
-            val ti = if (majorPointIndices.isNotEmpty() && currentTargetPointIndex < majorPointIndices.size) "TurnType: ${fullRouteNodes[majorPointIndices[currentTargetPointIndex]].turnType}" else ""
-            telemetryTextView.text = "Acc: ${"%.1f".format(pose.horizontalAccuracy)}m\nLat: ${"%.5f".format(lat)}\nLng: ${"%.5f".format(lng)}\nAlt: ${"%.1f".format(pose.altitude)}m\n$ti"
-        }}
         if (viewModel.navigationState.value == NavigationState.LOCALIZING && pose.horizontalAccuracy < 10.0 && targetDestination.isNotEmpty()) { viewModel.updateState(NavigationState.READY_TO_ROUTE); viewModel.fetchRoute(lng.toString(), lat.toString(), targetDestination) }
         if (viewModel.navigationState.value == NavigationState.READY_TO_ROUTE && majorPointIndices.isNotEmpty()) {
             if (lastAnchorAltitude != Double.MAX_VALUE && kotlin.math.abs(pose.altitude - lastAnchorAltitude) > 1.5) {
@@ -264,8 +256,8 @@ class ArNavigationActivity : AppCompatActivity() {
                 val st = when (tn.type) {
                     NodeType.END -> { updateNavCard("목적지", "${dist.toInt()}m", false); "목적지까지 ${dist.toInt()}m" }
                     NodeType.TURN_POINT -> when (turnDirectionMap[currentTargetPointIndex]) {
-                        true -> { val l = if (tn.turnType == 18) "우측" else "우회전"; updateNavCard(l, "${dist.toInt()}m", false); "${l}까지 ${dist.toInt()}m" }
-                        false -> { val l = if (tn.turnType == 17) "좌측" else "좌회전"; updateNavCard(l, "${dist.toInt()}m", false); "${l}까지 ${dist.toInt()}m" }
+                        true -> { val l = if (tn.turnType == 18) "우측 경로" else "우회전"; updateNavCard(l, "${dist.toInt()}m", false); "${l}까지 ${dist.toInt()}m" }
+                        false -> { val l = if (tn.turnType == 17) "좌측 경로" else "좌회전"; updateNavCard(l, "${dist.toInt()}m", false); "${l}까지 ${dist.toInt()}m" }
                         null -> { updateNavCard("직진", "${dist.toInt()}m", false); "다음 지점까지 ${dist.toInt()}m" } }
                     else -> { updateNavCard("직진", "${dist.toInt()}m", false); "다음 지점까지 ${dist.toInt()}m" } }
                 updateStatusUI(st)
@@ -282,9 +274,9 @@ class ArNavigationActivity : AppCompatActivity() {
     // ───── 내비 카드 ─────
     private fun updateNavCard(direction: String, distance: String, isArrival: Boolean) { runOnUiThread {
         binding.navDistanceText.text = if (isArrival) "도착!" else distance
-        binding.navInstructionText.text = when (direction) { "좌회전" -> "좌회전"; "우회전" -> "우회전"; "좌측" -> "좌측"; "우측" -> "우측"; "목적지" -> "목적지 근처"; else -> "직진" }
-        binding.directionIcon.setImageResource(when (direction) { "좌회전", "좌측" -> android.R.drawable.ic_media_rew; "우회전", "우측" -> android.R.drawable.ic_media_ff; "목적지" -> android.R.drawable.ic_menu_mylocation; else -> android.R.drawable.ic_media_play })
-        binding.directionIcon.rotation = when (direction) { "좌회전", "우회전", "좌측", "우측", "목적지" -> 0f; else -> -90f }
+        binding.navInstructionText.text = when (direction) { "좌회전" -> "좌회전"; "우회전" -> "우회전"; "좌측 경로" -> "좌측 경로"; "우측 경로" -> "우측 경로"; "목적지" -> "목적지 근처"; else -> "직진" }
+        binding.directionIcon.setImageResource(when (direction) { "좌회전", "좌측 경로" -> android.R.drawable.ic_media_rew; "우회전", "우측 경로" -> android.R.drawable.ic_media_ff; "목적지" -> android.R.drawable.ic_menu_mylocation; else -> android.R.drawable.ic_media_play })
+        binding.directionIcon.rotation = when (direction) { "좌회전", "우회전", "좌측 경로", "우측 경로", "목적지" -> 0f; else -> -90f }
     }}
 
     // ───── AR 렌더링 ─────
@@ -304,7 +296,7 @@ class ArNavigationActivity : AppCompatActivity() {
                     var lbi = i - 1; while (lbi > 0 && fullRouteNodes[lbi].type == NodeType.TURN_POINT) lbi--
                     val lbn = fullRouteNodes.getOrNull(lbi) ?: node; val ir = FloatArray(2); Location.distanceBetween(lbn.lat, lbn.lng, node.lat, node.lng, ir)
                     val mi = majorPointIndices.indexOf(i); if (mi != -1) turnDirectionMap[mi] = (node.turnType == 18)
-                    lifecycleScope.launch { sceneView.modelLoader.loadModelInstance(mp)?.let { val an = ModelNode(it).apply { scale = Float3(3f, 3f, 3f); rotation = Float3(0f, ir[1] + 180f, 0f) }; anchorNode.addChildNode(an); activeModelNodes[i] = an }; sceneView.addChildNode(anchorNode); activeArNodes[i] = anchorNode }; continue
+                    lifecycleScope.launch { sceneView.modelLoader.loadModelInstance(mp)?.let { val an = ModelNode(it).apply { scale = Float3(1f, 1f, 1f); rotation = Float3(0f, ir[1] + 180f, 0f) }; anchorNode.addChildNode(an); activeModelNodes[i] = an }; sceneView.addChildNode(anchorNode); activeArNodes[i] = anchorNode }; continue
                 }
                 val isRight: Boolean? = when (node.turnType) { 13, 19 -> true; 12, 16 -> false; else -> {
                     val d = FloatArray(1); var pi = i - 1; while (pi > 0) { val c = fullRouteNodes[pi]; if (c.type == NodeType.TURN_POINT) break; Location.distanceBetween(c.lat, c.lng, node.lat, node.lng, d); if (d[0] >= 10f) break; pi-- }
@@ -315,7 +307,7 @@ class ArNavigationActivity : AppCompatActivity() {
                 val mp = if (isRight) "models/right.glb" else "models/left.glb"
                 var lbi = i - 1; while (lbi > 0 && fullRouteNodes[lbi].type == NodeType.TURN_POINT) lbi--
                 val lbn = fullRouteNodes.getOrNull(lbi) ?: node; val ir = FloatArray(2); Location.distanceBetween(lbn.lat, lbn.lng, node.lat, node.lng, ir)
-                lifecycleScope.launch { sceneView.modelLoader.loadModelInstance(mp)?.let { val an = ModelNode(it).apply { scale = Float3(3f, 3f, 3f); rotation = Float3(0f, ir[1] + 180f, 0f) }; anchorNode.addChildNode(an); activeModelNodes[i] = an }; sceneView.addChildNode(anchorNode); activeArNodes[i] = anchorNode }
+                lifecycleScope.launch { sceneView.modelLoader.loadModelInstance(mp)?.let { val an = ModelNode(it).apply { scale = Float3(1f, 1f, 1f); rotation = Float3(0f, ir[1] + 180f, 0f) }; anchorNode.addChildNode(an); activeModelNodes[i] = an }; sceneView.addChildNode(anchorNode); activeArNodes[i] = anchorNode }
             } else {
                 val path = when (node.type) { NodeType.START, NodeType.END -> "models/map_pointer.glb"; else -> continue }
                 lifecycleScope.launch { sceneView.modelLoader.loadModelInstance(path)?.let { val h = earth.cameraGeospatialPose.heading.toFloat(); val mn = ModelNode(it).apply { scale = Float3(1f, 1f, 1f); rotation = Float3(0f, h, 0f) }; anchorNode.addChildNode(mn); activeModelNodes[i] = mn; sceneView.addChildNode(anchorNode); activeArNodes[i] = anchorNode } }
@@ -341,7 +333,6 @@ class ArNavigationActivity : AppCompatActivity() {
         googleMap.clear(); routeLatLngs.clear(); myLocationMarker = null
         fullRouteNodes.forEach { routeLatLngs.add(com.google.android.gms.maps.model.LatLng(it.lat, it.lng)) }
         googleMap.addPolyline(com.google.android.gms.maps.model.PolylineOptions().addAll(routeLatLngs).width(8f).color(android.graphics.Color.parseColor("#4285F4")))
-        fullRouteNodes.firstOrNull()?.let { googleMap.addMarker(com.google.android.gms.maps.model.MarkerOptions().position(com.google.android.gms.maps.model.LatLng(it.lat, it.lng)).title("출발")) }
         fullRouteNodes.lastOrNull()?.let { googleMap.addMarker(com.google.android.gms.maps.model.MarkerOptions().position(com.google.android.gms.maps.model.LatLng(it.lat, it.lng)).title("목적지")) }
         sceneView.session?.earth?.let { if (it.trackingState == TrackingState.TRACKING) { val p = it.cameraGeospatialPose; googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(com.google.android.gms.maps.model.LatLng(p.latitude, p.longitude), 17f)) } }
     }
