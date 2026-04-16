@@ -30,8 +30,10 @@ import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
 import com.scanpang.app.data.Place
 import com.scanpang.app.data.RestaurantPlace
+import com.scanpang.app.data.remote.HalalRestaurant
 import com.scanpang.app.data.remote.NavCandidate
 import com.scanpang.app.data.remote.ScanPangViewModel
+import com.scanpang.app.data.toRestaurantPlace
 import com.scanpang.app.ui.theme.ScanPangType
 import com.scanpang.app.components.ScanPangSearchFieldFilled
 import com.scanpang.app.components.SearchResultBadgeKind
@@ -130,6 +132,26 @@ private fun placeMatchesQuery(p: Place, raw: String): Boolean {
         p.tags.any { it.contains(q, ignoreCase = true) }
 }
 
+private fun HalalRestaurant.toResultRow(): ResultRow {
+    val rp = toRestaurantPlace()
+    val item = rp.toRestaurantResultItem()
+    return ResultRow(
+        id = "halal:${restaurant_id}",
+        item = item,
+        detailRoute = AppRoutes.restaurantDetailRoute(name_ko),
+    )
+}
+
+private fun HalalRestaurant.matchesQuery(query: String): Boolean {
+    val q = query.trim()
+    if (q.isEmpty()) return true
+    return name_ko.contains(q, ignoreCase = true) ||
+        name_en.contains(q, ignoreCase = true) ||
+        cuisine_type.any { it.contains(q, ignoreCase = true) } ||
+        halal_type.contains(q, ignoreCase = true) ||
+        address.contains(q, ignoreCase = true)
+}
+
 private fun NavCandidate.toResultRow(): ResultRow {
     val item = ResultItem(
         id = poi_id,
@@ -225,6 +247,7 @@ fun SearchResultsScreen(
 
     val viewModel: ScanPangViewModel = viewModel()
     val navSearchResult by viewModel.navSearchResult.collectAsState()
+    val apiRestaurants by viewModel.restaurants.collectAsState()
     val isLoading by viewModel.loading.collectAsState()
 
     LaunchedEffect(navQueryTrimmed) {
@@ -232,6 +255,7 @@ fun SearchResultsScreen(
             viewModel.searchNavigation(navQueryTrimmed, 37.5636, 126.9822)
         }
     }
+    LaunchedEffect(Unit) { viewModel.loadRestaurants() }
 
     fun signalSearchTabClear() {
         runCatching {
@@ -240,9 +264,17 @@ fun SearchResultsScreen(
         }
     }
 
-    val resultRows = remember(navQueryTrimmed, navSearchResult) {
-        val apiRows = navSearchResult?.candidates?.map { it.toResultRow() } ?: emptyList()
-        apiRows.ifEmpty { buildAllSearchRows(navQueryTrimmed) }
+    val resultRows = remember(navQueryTrimmed, navSearchResult, apiRestaurants) {
+        // 할랄 식당 API 검색 결과
+        val halalRows = apiRestaurants
+            .filter { it.matchesQuery(navQueryTrimmed) }
+            .map { it.toResultRow() }
+        // POI 네비게이션 검색 결과
+        val navRows = navSearchResult?.candidates?.map { it.toResultRow() } ?: emptyList()
+        // 할랄 식당 우선, 네비게이션 결과 추가 (중복 제거)
+        val halalNames = halalRows.map { it.item.title }.toSet()
+        val merged = halalRows + navRows.filter { it.item.title !in halalNames }
+        merged.ifEmpty { buildAllSearchRows(navQueryTrimmed) }
     }
 
     Scaffold(

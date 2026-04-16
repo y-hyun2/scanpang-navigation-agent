@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.scanpang.app.data.DummyData
+import com.scanpang.app.data.RestaurantPlace
 import com.scanpang.app.data.SavedPlaceNavTarget
 import com.scanpang.app.data.galleryModels
 import com.scanpang.app.data.remote.ScanPangViewModel
@@ -77,16 +78,31 @@ fun RestaurantDetailScreen(
 
     LaunchedEffect(Unit) { viewModel.loadRestaurants() }
 
-    val rp = remember(apiRestaurants, placeName) {
+    val rp: RestaurantPlace? = remember(apiRestaurants, placeName) {
         val fromApi = apiRestaurants.map { it.toRestaurantPlace() }
         if (placeName.isNotBlank()) {
             fromApi.firstOrNull { it.place.name == placeName }
-                ?: DummyData.halalRestaurants.firstOrNull { it.place.name == placeName }
-        } else null
-    } ?: remember(apiRestaurants) {
-        apiRestaurants.firstOrNull()?.toRestaurantPlace()
-    } ?: DummyData.halalRestaurants.first()
-    val place = rp.place
+        } else {
+            fromApi.firstOrNull()
+        }
+    }
+
+    // API 로딩 중이면 로딩 표시 (DummyData 플래시 방지)
+    if (rp == null && isLoading) {
+        Box(
+            modifier = modifier.fillMaxSize().background(ScanPangColors.Surface),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator(color = ScanPangColors.Primary)
+        }
+        return
+    }
+
+    // API 실패 시 DummyData 폴백
+    val finalRp = rp
+        ?: DummyData.halalRestaurants.firstOrNull { it.place.name == placeName }
+        ?: DummyData.halalRestaurants.first()
+    val place = finalRp.place
     val imageModels = remember(place.id) { place.galleryModels(defaultPlaceDetailGallery()) }
     val pagerState = rememberPagerState(pageCount = { imageModels.size })
     var fullscreenOpen by remember { mutableStateOf(false) }
@@ -140,7 +156,7 @@ fun RestaurantDetailScreen(
                 horizontalArrangement = Arrangement.spacedBy(ScanPangDimens.stackGap6),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RestaurantHalalCategoryChip(label = rp.halalCategory)
+                RestaurantHalalCategoryChip(label = finalRp.halalCategory)
                 place.tags.take(2).forEach { tag ->
                     val icon = when {
                         tag.contains("인증") || tag.contains("살람") -> Icons.Rounded.Verified
@@ -190,15 +206,17 @@ fun RestaurantDetailScreen(
             HorizontalDivider(color = ScanPangColors.OutlineSubtle)
             DetailSectionHeader(title = "소개")
             DetailIntroBody(text = place.description)
-            DetailSectionHeader(title = "대표 메뉴")
-            Column(verticalArrangement = Arrangement.spacedBy(ScanPangSpacing.sm)) {
-                rp.menuItems.forEach { m ->
-                    DetailMenuPriceRow(name = m.name, price = m.price)
+            if (finalRp.menuItems.isNotEmpty()) {
+                DetailSectionHeader(title = "대표 메뉴")
+                Column(verticalArrangement = Arrangement.spacedBy(ScanPangSpacing.sm)) {
+                    finalRp.menuItems.forEach { m ->
+                        DetailMenuPriceRow(name = m.name, price = m.price)
+                    }
                 }
             }
-            if (rp.lastOrder.isNotBlank()) {
+            if (finalRp.lastOrder.isNotBlank()) {
                 Text(
-                    text = "라스트오더 ${rp.lastOrder}",
+                    text = "라스트오더 ${finalRp.lastOrder}",
                     style = ScanPangType.caption12Medium,
                     color = ScanPangColors.OnSurfaceMuted,
                 )

@@ -37,6 +37,7 @@ class HalalRestaurant(BaseModel):
     no_alcohol_sales: Optional[bool] = None
     cuisine_type: List[str] = []
     menu_examples: List[str] = []
+    short_description_ko: str = ""
     distance_m: float
     lat: float
     lng: float

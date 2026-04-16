@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -53,18 +54,32 @@ fun PrayerRoomDetailScreen(
 ) {
     val viewModel: ScanPangViewModel = viewModel()
     val apiPrayerRooms by viewModel.prayerRooms.collectAsState()
+    val isLoading by viewModel.loading.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.loadPrayerRooms() }
 
-    val place = remember(apiPrayerRooms, placeName) {
+    val apiPlace = remember(apiPrayerRooms, placeName) {
         val fromApi = apiPrayerRooms.map { it.toPlace() }
         if (placeName.isNotBlank()) {
             fromApi.firstOrNull { it.name == placeName }
-                ?: DummyData.prayerRooms.firstOrNull { it.name == placeName }
         } else {
             fromApi.firstOrNull()
         }
-    } ?: DummyData.prayerRooms.first()
+    }
+
+    if (apiPlace == null && isLoading) {
+        Box(
+            modifier = modifier.fillMaxSize().background(ScanPangColors.Surface),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator(color = ScanPangColors.Primary)
+        }
+        return
+    }
+
+    val place = apiPlace
+        ?: DummyData.prayerRooms.firstOrNull { it.name == placeName }
+        ?: DummyData.prayerRooms.first()
     val imageModels = remember(place.id) { place.galleryModels(defaultPlaceDetailGallery()) }
     val pagerState = rememberPagerState(pageCount = { imageModels.size })
     val bookmark = rememberDetailBookmark(

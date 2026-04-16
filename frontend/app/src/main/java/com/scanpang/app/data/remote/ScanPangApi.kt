@@ -238,6 +238,7 @@ data class HalalRestaurant(
     val no_alcohol_sales: Boolean? = null,
     val cuisine_type: List<String> = emptyList(),
     val menu_examples: List<String> = emptyList(),
+    val short_description_ko: String = "",
     val distance_m: Double = 0.0,
     val lat: Double = 0.0,
     val lng: Double = 0.0,

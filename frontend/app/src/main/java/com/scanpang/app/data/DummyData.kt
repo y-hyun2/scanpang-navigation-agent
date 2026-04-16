@@ -521,13 +521,20 @@ fun HalalRestaurant.toRestaurantPlace(): RestaurantPlace = RestaurantPlace(
         id = restaurant_id.ifBlank { name_ko },
         name = name_ko,
         category = "식당",
-        subCategory = cuisine_type.joinToString(", "),
+        subCategory = cuisine_type.joinToString(", ").ifBlank { halal_type },
         distance = if (distance_m > 0) "${distance_m.toInt()}m" else "",
         address = address,
         phone = phone,
         openHours = opening_hours,
-        isOpen = true,
-        description = "${name_ko} - ${cuisine_type.joinToString(", ")} 할랄 식당",
+        isOpen = opening_hours.isNotBlank() && !opening_hours.contains("closed", ignoreCase = true),
+        description = short_description_ko.ifBlank {
+            buildString {
+                append(name_ko)
+                if (name_en.isNotBlank()) append(" ($name_en)")
+                if (cuisine_type.isNotEmpty()) append(" - ${cuisine_type.joinToString(", ")}")
+                append(" 할랄 식당")
+            }
+        },
         tags = buildList {
             if (halal_type.isNotBlank()) add("할랄 인증")
             if (muslim_cooks_available == true) add("무슬림 조리사")

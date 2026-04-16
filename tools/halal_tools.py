@@ -177,6 +177,7 @@ def halal_restaurant_search(
             "no_alcohol_sales": r.get("no_alcohol_sales"),
             "cuisine_type": r.get("cuisine_type", []),
             "menu_examples": menu_names,
+            "short_description_ko": r.get("short_description_ko", ""),
             "distance_m": round(dist, 1),
             "lat": r_lat,
             "lng": r_lng,
