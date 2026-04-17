@@ -297,10 +297,13 @@ fun GeospatialARExploreScreen(
 
     // /place/query API 호출
     suspend fun callPlaceQuery(heading: Double, lat: Double, lng: Double, alt: Double, pitch: Double): PlaceQueryResponse? {
+        Log.d("SCANPANG_AR", "callPlaceQuery START heading=${"%.1f".format(heading)} lat=${"%.6f".format(lat)} lng=${"%.6f".format(lng)}")
         return try {
-            api.queryPlace(PlaceQueryRequest(heading = heading, user_lat = lat, user_lng = lng, user_alt = alt, pitch = pitch))
+            val result = api.queryPlace(PlaceQueryRequest(heading = heading, user_lat = lat, user_lng = lng, user_alt = alt, pitch = pitch))
+            Log.d("SCANPANG_AR", "callPlaceQuery OK: name=${result.ar_overlay?.name}, category=${result.ar_overlay?.category}")
+            result
         } catch (e: Exception) {
-            Log.e("SCANPANG", "place/query 오류: ${e.message}")
+            Log.e("SCANPANG_AR", "callPlaceQuery FAILED: ${e.message}", e)
             null
         }
     }
@@ -341,11 +344,18 @@ fun GeospatialARExploreScreen(
                     config.depthMode = Config.DepthMode.AUTOMATIC
                 },
                 onSessionUpdated = { session, frame ->
-                    val earth = session.earth ?: return@ARScene
+                    val earth = session.earth
+                    if (earth == null) {
+                        Log.w("SCANPANG_AR", "earth is null")
+                        return@ARScene
+                    }
                     val camera = frame.camera
                     if (earth.earthState != Earth.EarthState.ENABLED ||
                         earth.trackingState != TrackingState.TRACKING
-                    ) return@ARScene
+                    ) {
+                        Log.d("SCANPANG_AR", "earth not ready: state=${earth.earthState}, tracking=${earth.trackingState}")
+                        return@ARScene
+                    }
 
                     val pose = earth.cameraGeospatialPose
                     val userLat = pose.latitude
@@ -354,6 +364,11 @@ fun GeospatialARExploreScreen(
                     currentLng = userLng
                     currentHeading = pose.heading
                     currentAltitude = pose.altitude
+
+                    // 10프레임마다 상태 로그
+                    if (System.currentTimeMillis() % 10000 < 100) {
+                        Log.d("SCANPANG_AR", "VPS: acc=${"%.2f".format(pose.horizontalAccuracy)}m, high=$hasAchievedHighAccuracy, pois=${dynamicPois.size}, lat=${"%.6f".format(userLat)}")
+                    }
 
                     val q = pose.eastUpSouthQuaternion
                     val fx = 2f * (q[0] * q[2] + q[3] * q[1])
@@ -378,6 +393,7 @@ fun GeospatialARExploreScreen(
                         val now = System.currentTimeMillis()
                         if (now - lastQueryTime > 5000 && !isFrozen) {
                             lastQueryTime = now
+                            Log.d("SCANPANG_AR", "5sec auto query triggered")
                             scope.launch {
                                 val response = callPlaceQuery(currentHeading, userLat, userLng, currentAltitude, currentPitch)
                                 val overlay = response?.ar_overlay ?: return@launch
