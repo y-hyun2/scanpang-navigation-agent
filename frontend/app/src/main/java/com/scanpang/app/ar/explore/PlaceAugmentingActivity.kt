@@ -80,6 +80,7 @@ import com.scanpang.app.ui.theme.ScanPangType
 import io.github.sceneview.ar.ARScene
 import io.github.sceneview.rememberEngine
 import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.sp
 import kotlin.math.atan2
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -99,6 +100,8 @@ private data class DynamicPoi(
 class PlaceAugmentingActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        android.util.Log.e("SCANPANG_AR", "=== PlaceAugmentingActivity onCreate ===")
+        android.widget.Toast.makeText(this, "AR Activity 시작됨", android.widget.Toast.LENGTH_SHORT).show()
         setContent {
             ScanPangTheme {
                 PlaceAugmentingScreen(
@@ -393,27 +396,50 @@ fun GeospatialARExploreScreen(
                         val now = System.currentTimeMillis()
                         if (now - lastQueryTime > 5000 && !isFrozen) {
                             lastQueryTime = now
-                            Log.d("SCANPANG_AR", "5sec auto query triggered")
+                            val capturedLat = userLat
+                            val capturedLng = userLng
+                            val capturedAlt = pose.altitude
+                            val capturedHeading = currentHeading
+                            val capturedPitch = currentPitch
                             scope.launch {
-                                val response = callPlaceQuery(currentHeading, userLat, userLng, currentAltitude, currentPitch)
-                                val overlay = response?.ar_overlay ?: return@launch
-                                if (overlay.name.isBlank()) return@launch
-                                val alreadyExists = dynamicPois.any { it.name == overlay.name }
-                                if (!alreadyExists) {
+                                try {
+                                    trackingMessage = "건물 쿼리 중..."
+                                    val response = callPlaceQuery(capturedHeading, capturedLat, capturedLng, capturedAlt, capturedPitch)
+                                    val overlay = response?.ar_overlay
+                                    if (overlay == null) {
+                                        trackingMessage = "API 응답: overlay=null"
+                                        return@launch
+                                    }
+                                    if (overlay.name.isBlank()) {
+                                        trackingMessage = "API 응답: name 비어있음"
+                                        return@launch
+                                    }
+                                    val alreadyExists = dynamicPois.any { it.name == overlay.name }
+                                    if (alreadyExists) {
+                                        trackingMessage = "이미 존재: ${overlay.name}"
+                                        return@launch
+                                    }
                                     val newId = "auto_${overlay.name}_${now}"
-                                    val newAnchor = earth.createAnchor(userLat, userLng, pose.altitude, 0f, 0f, 0f, 1f)
-                                    geospatialAnchors[newId] = newAnchor
+                                    try {
+                                        val newAnchor = earth.createAnchor(capturedLat, capturedLng, capturedAlt, 0f, 0f, 0f, 1f)
+                                        geospatialAnchors[newId] = newAnchor
+                                    } catch (e: Exception) {
+                                        trackingMessage = "앵커 생성 실패: ${e.message?.take(40)}"
+                                    }
                                     dynamicPois.add(
                                         DynamicPoi(
                                             id = newId,
                                             name = overlay.name,
                                             category = overlay.category,
-                                            latitude = userLat,
-                                            longitude = userLng,
+                                            latitude = capturedLat,
+                                            longitude = capturedLng,
                                             arOverlay = overlay,
                                             docent = response.docent,
                                         ),
                                     )
+                                    trackingMessage = "✓ ${overlay.name} (${dynamicPois.size}개)"
+                                } catch (e: Exception) {
+                                    trackingMessage = "쿼리 실패: ${e.message?.take(40)}"
                                 }
                             }
                         }
@@ -421,8 +447,12 @@ fun GeospatialARExploreScreen(
                         // 탭 기반 건물 인식 (hit test)
                         if (triggerHitTest) {
                             triggerHitTest = false
+                            trackingMessage = "건물 스캔 중..."
                             val hitResults = frame.hitTest(screenWidthPx / 2f, screenHeightPx / 2f)
                             var foundSurface = false
+                            val capturedLat2 = userLat
+                            val capturedLng2 = userLng
+                            val capturedAlt2 = pose.altitude
 
                             for (hitResult in hitResults) {
                                 val trackable = hitResult.trackable
@@ -433,8 +463,12 @@ fun GeospatialARExploreScreen(
                                     if (hitResult.distance > 1.5f) {
                                         val hitGeoPose = earth.getGeospatialPose(hitResult.hitPose)
                                         val newId = "hit_${System.currentTimeMillis()}"
-                                        val newAnchor = earth.createAnchor(hitGeoPose.latitude, hitGeoPose.longitude, hitGeoPose.altitude, 0f, 0f, 0f, 1f)
-                                        geospatialAnchors[newId] = newAnchor
+                                        try {
+                                            val newAnchor = earth.createAnchor(hitGeoPose.latitude, hitGeoPose.longitude, hitGeoPose.altitude, 0f, 0f, 0f, 1f)
+                                            geospatialAnchors[newId] = newAnchor
+                                        } catch (e: Exception) {
+                                            trackingMessage = "HIT 앵커 실패: ${e.message?.take(30)}"
+                                        }
 
                                         // 캐시 확인
                                         var cached: DynamicPoi? = null
@@ -446,21 +480,23 @@ fun GeospatialARExploreScreen(
                                         if (cached != null) {
                                             Location.distanceBetween(userLat, userLng, cached.latitude, cached.longitude, results)
                                             dynamicPois.add(cached.copy(id = newId, distance = results[0]))
+                                            trackingMessage = "✓ 캐시: ${cached.name}"
                                         } else {
                                             Location.distanceBetween(userLat, userLng, hitGeoPose.latitude, hitGeoPose.longitude, results)
                                             dynamicPois.add(DynamicPoi(newId, "분석 중...", "", results[0], hitGeoPose.latitude, hitGeoPose.longitude, isPending = true))
                                             scope.launch {
-                                                val response = callPlaceQuery(currentHeading, userLat, userLng, currentAltitude, currentPitch)
+                                                val response = callPlaceQuery(currentHeading, capturedLat2, capturedLng2, capturedAlt2, currentPitch)
                                                 val idx = dynamicPois.indexOfFirst { it.id == newId }
                                                 if (idx != -1) {
-                                                    val final = dynamicPois[idx].copy(
-                                                        name = response?.ar_overlay?.name?.takeIf { it.isNotEmpty() } ?: "알 수 없는 장소",
+                                                    val finalPoi = dynamicPois[idx].copy(
+                                                        name = response?.ar_overlay?.name?.takeIf { it.isNotEmpty() } ?: "주변 건물",
                                                         arOverlay = response?.ar_overlay,
                                                         docent = response?.docent,
                                                         isPending = false,
                                                     )
-                                                    dynamicPois[idx] = final
-                                                    verifiedCache.add(final)
+                                                    dynamicPois[idx] = finalPoi
+                                                    verifiedCache.add(finalPoi)
+                                                    trackingMessage = "✓ ${finalPoi.name}"
                                                 }
                                             }
                                         }
@@ -471,21 +507,26 @@ fun GeospatialARExploreScreen(
 
                             if (!foundSurface) {
                                 val newId = "hit_${System.currentTimeMillis()}"
-                                val newAnchor = earth.createAnchor(userLat, userLng, pose.altitude, 0f, 0f, 0f, 1f)
-                                geospatialAnchors[newId] = newAnchor
+                                try {
+                                    val newAnchor = earth.createAnchor(userLat, userLng, pose.altitude, 0f, 0f, 0f, 1f)
+                                    geospatialAnchors[newId] = newAnchor
+                                } catch (e: Exception) {
+                                    trackingMessage = "NOHIT 앵커 실패: ${e.message?.take(30)}"
+                                }
                                 dynamicPois.add(DynamicPoi(newId, "분석 중...", "", 0f, userLat, userLng, isPending = true))
                                 scope.launch {
-                                    val response = callPlaceQuery(currentHeading, userLat, userLng, currentAltitude, currentPitch)
+                                    val response = callPlaceQuery(currentHeading, capturedLat2, capturedLng2, capturedAlt2, currentPitch)
                                     val idx = dynamicPois.indexOfFirst { it.id == newId }
                                     if (idx != -1) {
-                                        val final = dynamicPois[idx].copy(
-                                            name = response?.ar_overlay?.name?.takeIf { it.isNotEmpty() } ?: "알 수 없는 장소",
+                                        val finalPoi = dynamicPois[idx].copy(
+                                            name = response?.ar_overlay?.name?.takeIf { it.isNotEmpty() } ?: "주변 건물",
                                             arOverlay = response?.ar_overlay,
                                             docent = response?.docent,
                                             isPending = false,
                                         )
-                                        dynamicPois[idx] = final
-                                        verifiedCache.add(final)
+                                        dynamicPois[idx] = finalPoi
+                                        verifiedCache.add(finalPoi)
+                                        trackingMessage = "✓ ${finalPoi.name}"
                                     }
                                 }
                             }
@@ -523,6 +564,26 @@ fun GeospatialARExploreScreen(
             if (isFrozen) {
                 Box(modifier = Modifier.fillMaxSize().background(ScanPangColors.ArFreezeTint))
             }
+
+            // ── 디버그 오버레이 (VPS 상태 + POI 개수) ──
+            Text(
+                text = buildString {
+                    append("VPS=$hasAchievedHighAccuracy")
+                    append(" POIs=${dynamicPois.size}")
+                    append(" Anchors=${geospatialAnchors.size}")
+                    append(" Positions=${anchorScreenPositions.size}")
+                    if (currentLat != 0.0) append("\nLat=${"%.4f".format(currentLat)} Lng=${"%.4f".format(currentLng)}")
+                    append("\n$trackingMessage")
+                },
+                color = Color.Yellow,
+                fontSize = 10.sp,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(top = 60.dp, start = 8.dp)
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(4.dp),
+            )
 
             // ── 상단 바 ──
             Column(
@@ -609,13 +670,49 @@ fun GeospatialARExploreScreen(
                 )
             }
 
-            // ── 하단 채팅 섹션 ──
+            // ── 조준점 (중앙) ──
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(14.dp)
+                    .background(Color.White.copy(alpha = 0.6f), CircleShape),
+            )
+
+            // ── 하단: 스캔 버튼 + 채팅 ──
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                // "바라보는 지점 정보 가져오기" 버튼
+                if (hasAchievedHighAccuracy) {
+                    Text(
+                        text = "정확한 인식을 위해 유리가 아닌 불투명한 벽면을 조준하세요.",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.5f), ScanPangShapes.radius12)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { triggerHitTest = true },
+                        modifier = Modifier
+                            .fillMaxWidth(0.75f)
+                            .height(48.dp),
+                        shape = ScanPangShapes.radius12,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ScanPangColors.Primary,
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Text("바라보는 지점 정보 가져오기", style = ScanPangType.body15Medium)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 ArExploreInteractiveChatSection(
                     messages = chatMessages,
                     inputText = chatInput,

@@ -145,7 +145,7 @@ async def run_place_insight_agent(req: PlaceRequest) -> dict:
     bld_name_from_vworld = ""
 
     if vworld_meta:
-        bld_name_from_vworld = vworld_meta.get("bld_nm") or ""
+        bld_name_from_vworld = vworld_meta.get("bld_nm") or "주변 건물"
         # 2) place_info(관리 10개 건물) 중 이 폴리곤 내부에 좌표가 있는 건물 매칭
         place_data = _find_in_place_info_by_polygon(collection, vworld_meta)
 
