@@ -142,7 +142,7 @@ fun ArPoiFloatingDetailOverlay(
                 )
             }
         } else {
-            noonSquareFloorSections()
+            emptyList()
         }
     }
 
@@ -205,7 +205,11 @@ fun ArPoiFloatingDetailOverlay(
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                ArPoiStatusMetaRow()
+                ArPoiStatusMetaRow(
+                    category = arOverlay?.category ?: "",
+                    openHours = arOverlay?.open_hours ?: "",
+                    isEstimated = arOverlay?.is_estimated ?: false,
+                )
                 Spacer(modifier = Modifier.height(ScanPangSpacing.sm))
                 ArPoiDetailSegmentedTabs(
                     active = activeDetailTab,
@@ -238,43 +242,66 @@ fun ArPoiFloatingDetailOverlay(
 }
 
 @Composable
-private fun ArPoiStatusMetaRow() {
+private fun ArPoiStatusMetaRow(
+    category: String = "",
+    openHours: String = "",
+    isEstimated: Boolean = false,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ScanPangSpacing.sm),
     ) {
-        Surface(
-            shape = ScanPangShapes.badge6,
-            color = ScanPangColors.PrimarySoft,
-        ) {
+        if (category.isNotBlank()) {
+            Surface(
+                shape = ScanPangShapes.badge6,
+                color = ScanPangColors.PrimarySoft,
+            ) {
+                Text(
+                    text = category,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = ScanPangType.caption12Medium,
+                    color = ScanPangColors.Primary,
+                )
+            }
+        }
+        if (isEstimated) {
+            Surface(
+                shape = ScanPangShapes.badge6,
+                color = Color(0xFFFFF3E0),
+            ) {
+                Text(
+                    text = "AI 추정",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = ScanPangType.caption12Medium,
+                    color = Color(0xFFE65100),
+                )
+            }
+        }
+        if (openHours.isNotBlank()) {
             Text(
-                text = "쇼핑몰",
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                style = ScanPangType.caption12Medium,
-                color = ScanPangColors.Primary,
+                text = openHours,
+                style = ScanPangType.body14Regular,
+                color = ScanPangColors.OnSurfaceMuted,
             )
         }
-        Text(
-            text = "15m",
-            style = ScanPangType.body14Regular,
-            color = ScanPangColors.OnSurfaceMuted,
-        )
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(ScanPangColors.Success),
-            )
-            Text(
-                text = "영업 중",
-                style = ScanPangType.caption12Medium,
-                color = ScanPangColors.Success,
-            )
+            if (openHours.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(ScanPangColors.Success),
+                )
+                Text(
+                    text = "영업 중",
+                    style = ScanPangType.caption12Medium,
+                    color = ScanPangColors.Success,
+                )
+            }
         }
     }
 }
