@@ -11,6 +11,10 @@ class ScanPangViewModel : ViewModel() {
 
     private val api = RetrofitClient.api
 
+    init {
+        Log.d("ScanPangVM", "ViewModel CREATED, BASE_URL=${com.scanpang.app.BuildConfig.SERVER_URL}")
+    }
+
     // ── Loading ──
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading
@@ -50,14 +54,17 @@ class ScanPangViewModel : ViewModel() {
 
     fun loadPrayerTimesAndQibla(lat: Double = 37.5636, lng: Double = 126.9822) {
         viewModelScope.launch {
+            Log.d("ScanPangVM", "loadPrayerTimesAndQibla START (lat=$lat, lng=$lng)")
             try {
                 val ptResponse = api.queryHalal(HalalRequest(category = "prayer_time", lat = lat, lng = lng))
+                Log.d("ScanPangVM", "loadPrayerTimesAndQibla prayer_times=${ptResponse.prayer_times}")
                 _prayerTimes.value = ptResponse.prayer_times
 
                 val qResponse = api.queryHalal(HalalRequest(category = "qibla", lat = lat, lng = lng))
+                Log.d("ScanPangVM", "loadPrayerTimesAndQibla qibla=${qResponse.qibla}")
                 _qibla.value = qResponse.qibla
             } catch (e: Exception) {
-                Log.e("ScanPangVM", "loadPrayerTimesAndQibla failed", e)
+                Log.e("ScanPangVM", "loadPrayerTimesAndQibla FAILED", e)
             }
         }
     }
@@ -65,13 +72,15 @@ class ScanPangViewModel : ViewModel() {
     fun loadRestaurants(lat: Double = 37.5636, lng: Double = 126.9822, halalType: String = "") {
         viewModelScope.launch {
             _loading.value = true
+            Log.d("ScanPangVM", "loadRestaurants START (lat=$lat, lng=$lng, type=$halalType)")
             try {
                 val response = api.queryHalal(
                     HalalRequest(category = "restaurant", lat = lat, lng = lng, halal_type = halalType)
                 )
+                Log.d("ScanPangVM", "loadRestaurants OK: ${response.restaurants.size} restaurants")
                 _restaurants.value = response.restaurants
             } catch (e: Exception) {
-                Log.e("ScanPangVM", "loadRestaurants failed", e)
+                Log.e("ScanPangVM", "loadRestaurants FAILED", e)
             } finally {
                 _loading.value = false
             }
@@ -81,13 +90,15 @@ class ScanPangViewModel : ViewModel() {
     fun loadPrayerRooms(lat: Double = 37.5636, lng: Double = 126.9822) {
         viewModelScope.launch {
             _loading.value = true
+            Log.d("ScanPangVM", "loadPrayerRooms START (lat=$lat, lng=$lng)")
             try {
                 val response = api.queryHalal(
                     HalalRequest(category = "prayer_room", lat = lat, lng = lng)
                 )
+                Log.d("ScanPangVM", "loadPrayerRooms OK: ${response.prayer_rooms.size} rooms")
                 _prayerRooms.value = response.prayer_rooms
             } catch (e: Exception) {
-                Log.e("ScanPangVM", "loadPrayerRooms failed", e)
+                Log.e("ScanPangVM", "loadPrayerRooms FAILED", e)
             } finally {
                 _loading.value = false
             }
@@ -99,12 +110,14 @@ class ScanPangViewModel : ViewModel() {
     fun searchNavigation(message: String, lat: Double, lng: Double) {
         viewModelScope.launch {
             _loading.value = true
+            Log.d("ScanPangVM", "searchNavigation START (msg=$message)")
             try {
                 _navSearchResult.value = api.searchNavigation(
                     NavSearchRequest(message = message, lat = lat, lng = lng)
                 )
+                Log.d("ScanPangVM", "searchNavigation OK: ${_navSearchResult.value?.candidates?.size} candidates")
             } catch (e: Exception) {
-                Log.e("ScanPangVM", "searchNavigation failed", e)
+                Log.e("ScanPangVM", "searchNavigation FAILED", e)
             } finally {
                 _loading.value = false
             }
@@ -155,12 +168,14 @@ class ScanPangViewModel : ViewModel() {
     fun searchConvenience(category: String = "", message: String = "", lat: Double = 37.5636, lng: Double = 126.9822) {
         viewModelScope.launch {
             _loading.value = true
+            Log.d("ScanPangVM", "searchConvenience START (cat=$category)")
             try {
                 _convenienceResult.value = api.queryConvenience(
                     ConvenienceRequest(category = category, message = message, lat = lat, lng = lng)
                 )
+                Log.d("ScanPangVM", "searchConvenience OK: ${_convenienceResult.value?.facilities?.size} facilities")
             } catch (e: Exception) {
-                Log.e("ScanPangVM", "searchConvenience failed", e)
+                Log.e("ScanPangVM", "searchConvenience FAILED", e)
             } finally {
                 _loading.value = false
             }
