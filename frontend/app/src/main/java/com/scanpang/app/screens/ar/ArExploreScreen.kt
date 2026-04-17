@@ -147,6 +147,15 @@ fun ArExploreScreen(
     val convenienceResult by viewModel.convenienceResult.collectAsState()
     val context = LocalContext.current
 
+    // AR 건물 인식 Activity 실행 (ARCore VPS + /place/query)
+    // arsceneview 2.3.3의 ARScene composable은 Geospatial이 불안정하므로
+    // 독립 Activity(PlaceAugmentingActivity)에서 AR 처리
+    LaunchedEffect(Unit) {
+        context.startActivity(
+            Intent(context, com.scanpang.app.ar.explore.PlaceAugmentingActivity::class.java)
+        )
+    }
+
     // 카테고리 라벨 → convenience API category key 매핑
     val categoryKeyMap = mapOf(
         "쇼핑" to "shopping", "편의점" to "convenience_store", "식당" to "restaurant",
