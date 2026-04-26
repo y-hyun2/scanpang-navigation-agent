@@ -26,6 +26,10 @@ interface ScanPangApi {
     // ── Halal ──
     @POST("halal/query")
     suspend fun queryHalal(@Body request: HalalRequest): HalalResponse
+
+    // ── Orchestrator ──
+    @POST("ar/agent/chat")
+    suspend fun agentChat(@Body request: AgentChatRequest): AgentChatResponse
 }
 
 // ── Navigation DTOs ──
@@ -260,4 +264,22 @@ data class PrayerRoomDetail(
     val open_hours: String = "",
     val facilities: Map<String, Any> = emptyMap(),
     val availability_status: String = "unknown",
+)
+
+// ── Orchestrator DTOs ──
+
+data class AgentChatRequest(
+    val message: String,
+    val lat: Double,
+    val lng: Double,
+    val heading: Double = 0.0,
+    val language: String = "ko",
+    val session_id: String? = null,
+)
+
+data class AgentChatResponse(
+    val speech: String = "",
+    val source_agent: String = "",
+    val raw_data: Map<String, Any> = emptyMap(),
+    val session_id: String = "",
 )

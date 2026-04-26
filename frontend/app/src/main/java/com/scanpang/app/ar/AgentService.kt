@@ -1,38 +1,47 @@
 package com.scanpang.app.ar
 
-import com.scanpang.app.data.remote.PlaceQueryRequest
+import com.scanpang.app.data.remote.AgentChatRequest
 import com.scanpang.app.data.remote.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * AR 탐색/길안내 화면에서 사용하는 에이전트 서비스.
- * 백엔드 /place/query 엔드포인트와 연동.
- */
 interface AgentService {
     suspend fun sendMessage(text: String): String
     suspend fun sendVoice(audioData: ByteArray): String
 }
 
 class ScanPangAgentService(
-    private val lat: Double = 37.5636,
-    private val lng: Double = 126.9822,
-    private val heading: Double = 0.0,
+    private var lat: Double = 37.5636,
+    private var lng: Double = 126.9822,
+    private var heading: Double = 0.0,
+    private var language: String = "ko",
 ) : AgentService {
 
     private val api = RetrofitClient.api
 
+    /** ARCore onSessionUpdated에서 실시간으로 호출해 위치를 갱신 */
+    fun updatePosition(lat: Double, lng: Double, heading: Double) {
+        this.lat = lat
+        this.lng = lng
+        this.heading = heading
+    }
+
+    fun updateLanguage(language: String) {
+        this.language = language
+    }
+
     override suspend fun sendMessage(text: String): String = withContext(Dispatchers.IO) {
         try {
-            val response = api.queryPlace(
-                PlaceQueryRequest(
+            val response = api.agentChat(
+                AgentChatRequest(
+                    message = text,
+                    lat = lat,
+                    lng = lng,
                     heading = heading,
-                    user_lat = lat,
-                    user_lng = lng,
-                    user_message = text,
+                    language = language,
                 )
             )
-            response.docent?.speech ?: "응답을 받지 못했습니다."
+            response.speech.ifEmpty { "응답을 받지 못했습니다." }
         } catch (e: Exception) {
             "네트워크 오류: ${e.message}"
         }
